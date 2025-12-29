@@ -4,6 +4,7 @@ import {
   calculateTotalHours,
   formatScheduleForDisplay
 } from '../lib/scheduler.js'
+import { TIMING, STORAGE, COOKIES, ERROR_STRINGS, API } from '../lib/constants.js'
 
 console.log('Factorial Clock: Background service worker loaded')
 
@@ -136,7 +137,7 @@ async function getFactorialTab() {
       if (tabId === tab.id && info.status === 'complete') {
         chrome.tabs.onUpdated.removeListener(listener)
         console.log('[Service Worker] Tab loaded, waiting for content script...')
-        setTimeout(resolve, 1500)
+        setTimeout(resolve, TIMING.CONTENT_SCRIPT_READY_DELAY)
       }
     }
     chrome.tabs.onUpdated.addListener(listener)
@@ -217,7 +218,7 @@ async function createShift(tabId, sessionCookie, employeeId, clockIn, clockOut, 
           resolve(response.data)
         } else {
           // Only log detailed errors if it's not an overlap error
-          if (!response.error.includes('overlaps with shift')) {
+          if (!response.error.includes(ERROR_STRINGS.SHIFT_OVERLAP)) {
             console.error('[createShift] Error:', response.error)
           }
           reject(new Error(response.error || 'Unknown error'))
@@ -265,7 +266,7 @@ async function handleApplySchedule(scheduleData) {
     // Get session cookie
     const cookies = await chrome.cookies.getAll({
       domain: '.factorialhr.com',
-      name: '_factorial_session_v2'
+      name: COOKIES.FACTORIAL_SESSION
     })
 
     if (cookies.length === 0) {
@@ -311,7 +312,7 @@ async function handleApplySchedule(scheduleData) {
           shiftsCreated++
 
           // Small delay between shifts
-          await new Promise(resolve => setTimeout(resolve, 500))
+          await new Promise(resolve => setTimeout(resolve, TIMING.SHIFT_APPLICATION_DELAY))
 
           console.log(`  Shift 2: ${lunchEnd} -> ${checkout}`)
           const shift2 = await createShift(tab.id, sessionCookie, employeeId, lunchEnd, checkout, date)
@@ -336,12 +337,12 @@ async function handleApplySchedule(scheduleData) {
         console.log(`✓ Day ${date} completed. Total shifts created: ${shiftsCreated}`)
 
         // Small delay between days
-        await new Promise(resolve => setTimeout(resolve, 300))
+        await new Promise(resolve => setTimeout(resolve, TIMING.DAY_APPLICATION_DELAY))
 
       } catch (error) {
         const errorMsg = error.message
-        const isOverlapError = errorMsg.includes('overlaps with shift')
-        const isAuthError = errorMsg.includes('Not authenticated')
+        const isOverlapError = errorMsg.includes(ERROR_STRINGS.SHIFT_OVERLAP)
+        const isAuthError = errorMsg.includes(ERROR_STRINGS.NOT_AUTHENTICATED)
 
         // If authentication error, stop processing immediately
         if (isAuthError) {
@@ -365,7 +366,7 @@ async function handleApplySchedule(scheduleData) {
       console.warn('Some shifts failed:', errors)
 
       // Check if errors are due to overlapping shifts
-      const hasOverlapErrors = errors.some(e => e.error.includes('overlaps with shift'))
+      const hasOverlapErrors = errors.some(e => e.error.includes(ERROR_STRINGS.SHIFT_OVERLAP))
 
       if (hasOverlapErrors && shiftsCreated === 0) {
         throw new Error(`Cannot create shifts: All dates already have existing shifts in Factorial. Please review and delete existing shifts for these dates in Factorial before applying a new schedule.`)
@@ -449,8 +450,8 @@ async function handleSaveToHistory(scheduleData) {
     history.unshift(historyEntry) // Add to beginning
     console.log('[handleSaveToHistory] Added entry, new length:', history.length)
 
-    // Keep only last 50 entries
-    const trimmedHistory = history.slice(0, 50)
+    // Keep only last N entries
+    const trimmedHistory = history.slice(0, STORAGE.MAX_HISTORY_ENTRIES)
 
     await chrome.storage.sync.set({ history: trimmedHistory })
     console.log('[handleSaveToHistory] Saved to storage successfully')
@@ -470,8 +471,7 @@ async function handleGetEmployeeId() {
 
   try {
     // Use versioned API endpoint
-    const baseUrl = 'https://api.factorialhr.com/api/2025-10-01'
-    const url = `${baseUrl}/resources/api_public/credentials`
+    const url = API.CREDENTIALS_URL
 
     console.log('[handleGetEmployeeId] Request URL:', url)
 
