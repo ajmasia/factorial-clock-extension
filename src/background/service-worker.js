@@ -59,6 +59,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         .catch(error => sendResponse({ success: false, error: error.message }))
       return true
 
+    case 'getEmployeeId':
+      handleGetEmployeeId()
+        .then(result => sendResponse({ success: true, data: result }))
+        .catch(error => sendResponse({ success: false, error: error.message }))
+      return true
+
     default:
       sendResponse({ success: false, error: 'Unknown action' })
   }
@@ -280,15 +286,28 @@ async function handleApplySchedule(scheduleData) {
   try {
     // Get configuration
     const storage = await chrome.storage.sync.get(['config'])
-    const config = storage.config || DEFAULT_CONFIG
+    let config = storage.config || DEFAULT_CONFIG
 
-    // Validate Employee ID is configured
-    if (!config.employeeId || config.employeeId === 'auto' || config.employeeId === '') {
-      throw new Error('Employee ID not configured. Please set it in Configuration tab.')
+    // Auto-fetch Employee ID if not configured
+    let employeeId = config.employeeId
+    if (!employeeId || employeeId === 'auto' || employeeId === '') {
+      console.log('Employee ID not configured, attempting auto-fetch...')
+      try {
+        employeeId = await handleGetEmployeeId()
+        console.log('Auto-fetched Employee ID:', employeeId)
+
+        // Save to config for next time
+        config.employeeId = String(employeeId)
+        await chrome.storage.sync.set({ config })
+      } catch (error) {
+        console.error('Failed to auto-fetch Employee ID:', error)
+        throw new Error('Employee ID not configured and auto-fetch failed. Please set it manually in Configuration tab.')
+      }
+    } else {
+      employeeId = parseInt(employeeId)
     }
 
-    const employeeId = parseInt(config.employeeId)
-    console.log('Using configured Employee ID:', employeeId)
+    console.log('Using Employee ID:', employeeId)
 
     // Get session cookie
     const cookies = await chrome.cookies.getAll({
@@ -486,6 +505,61 @@ async function handleSaveToHistory(scheduleData) {
     return historyEntry
   } catch (error) {
     console.error('[handleSaveToHistory] Save to history failed:', error)
+    throw error
+  }
+}
+
+/**
+ * Get Employee ID from Factorial API
+ */
+async function handleGetEmployeeId() {
+  console.log('[handleGetEmployeeId] Fetching credentials from API...')
+
+  try {
+    // Use versioned API endpoint
+    const baseUrl = 'https://api.factorialhr.com/api/2025-10-01'
+    const url = `${baseUrl}/resources/api_public/credentials`
+
+    console.log('[handleGetEmployeeId] Request URL:', url)
+
+    // Make request with credentials: 'include' to send cookies automatically
+    const response = await fetch(url, {
+      method: 'GET',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json;charset=utf-8',
+        'Accept': 'application/json'
+      }
+    })
+
+    console.log('[handleGetEmployeeId] Response status:', response.status)
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('[handleGetEmployeeId] Error response:', errorText)
+      throw new Error(`API request failed: HTTP ${response.status}`)
+    }
+
+    const text = await response.text()
+    const result = text ? JSON.parse(text) : {}
+
+    console.log('[handleGetEmployeeId] Credentials response:', result)
+
+    if (!result.data || !Array.isArray(result.data) || result.data.length === 0) {
+      throw new Error('Invalid credentials response format')
+    }
+
+    const credentials = result.data[0]
+
+    if (!credentials.employee_id) {
+      throw new Error('Employee ID not found in credentials')
+    }
+
+    console.log('[handleGetEmployeeId] ✓ Employee ID found:', credentials.employee_id)
+    return credentials.employee_id
+
+  } catch (error) {
+    console.error('[handleGetEmployeeId] Failed:', error)
     throw error
   }
 }

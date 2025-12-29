@@ -27,6 +27,29 @@ function ConfigPage() {
     loadConfig()
   }, [])
 
+  // Auto-fetch employee ID if not set
+  useEffect(() => {
+    if (config.employeeId === 'auto' || config.employeeId === '') {
+      autoFetchEmployeeId()
+    }
+  }, [config.employeeId])
+
+  const autoFetchEmployeeId = async () => {
+    try {
+      console.log('[ConfigPage] Auto-fetching Employee ID...')
+      const response = await chrome.runtime.sendMessage({ action: 'getEmployeeId' })
+
+      if (response.success && response.data) {
+        console.log('[ConfigPage] Auto-fetched Employee ID:', response.data)
+        setConfig(prev => ({ ...prev, employeeId: String(response.data) }))
+        // Save automatically
+        chrome.storage.sync.set({ config: { ...config, employeeId: String(response.data) } })
+      }
+    } catch (error) {
+      console.log('[ConfigPage] Auto-fetch failed (will use manual entry):', error.message)
+    }
+  }
+
   const loadConfig = async () => {
     const result = await chrome.storage.sync.get(['config'])
     if (result.config) {
@@ -56,6 +79,22 @@ function ConfigPage() {
     chrome.storage.sync.set({ config }, () => {
       alert('Configuration saved!')
     })
+  }
+
+  const handleAutoDetectEmployeeId = async () => {
+    try {
+      const response = await chrome.runtime.sendMessage({ action: 'getEmployeeId' })
+
+      if (response.success) {
+        setConfig(prev => ({ ...prev, employeeId: String(response.data) }))
+        alert(`Employee ID detected: ${response.data}`)
+      } else {
+        alert(`Failed to detect Employee ID: ${response.error}`)
+      }
+    } catch (error) {
+      console.error('Error auto-detecting Employee ID:', error)
+      alert('Failed to detect Employee ID. Please enter it manually.')
+    }
   }
 
   return (
@@ -90,16 +129,28 @@ function ConfigPage() {
       <div className="card">
         <label className="block text-sm font-medium text-gray-700 mb-2">
           Employee ID
+          {config.employeeId && config.employeeId !== 'auto' && (
+            <span className="ml-2 text-xs text-green-600 font-normal">✓ Detected</span>
+          )}
         </label>
-        <input
-          type="text"
-          value={config.employeeId}
-          onChange={(e) => setConfig({ ...config, employeeId: e.target.value })}
-          placeholder="auto"
-          className="input"
-        />
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={config.employeeId}
+            onChange={(e) => setConfig({ ...config, employeeId: e.target.value })}
+            placeholder="Will be auto-detected"
+            className="input flex-1"
+            readOnly={config.employeeId && config.employeeId !== 'auto'}
+          />
+          <button
+            onClick={handleAutoDetectEmployeeId}
+            className="btn btn-secondary whitespace-nowrap"
+          >
+            Refresh
+          </button>
+        </div>
         <p className="text-xs text-gray-500 mt-1">
-          Set to "auto" for automatic detection, or enter your Employee ID number manually
+          Employee ID is automatically detected from your Factorial session
         </p>
       </div>
 

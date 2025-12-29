@@ -44,12 +44,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 })
 
 /**
- * Get employee ID from Factorial API
+ * Get employee ID from Factorial API using credentials endpoint
  */
 async function getEmployeeId() {
-  console.log('[Factorial API] Getting employee ID...')
+  console.log('[Factorial API] Getting employee credentials...')
 
-  const response = await fetch('https://app.factorialhr.com/api/v1/core/employees/me', {
+  const response = await fetch('https://app.factorialhr.com/resources/api_public/credentials', {
     method: 'GET',
     credentials: 'include',
     headers: {
@@ -58,18 +58,27 @@ async function getEmployeeId() {
     }
   })
 
+  console.log('[Factorial API] Response status:', response.status)
+
   if (!response.ok) {
-    throw new Error(`Failed to get employee ID: HTTP ${response.status}`)
+    throw new Error(`Failed to get credentials: HTTP ${response.status}`)
   }
 
-  const data = await response.json()
-  console.log('[Factorial API] Employee ID:', data.id)
+  const result = await response.json()
+  console.log('[Factorial API] Credentials response:', result)
 
-  if (!data.id) {
-    throw new Error('Employee ID not found in response')
+  if (!result.data || !Array.isArray(result.data) || result.data.length === 0) {
+    throw new Error('Invalid credentials response format')
   }
 
-  return data.id
+  const credentials = result.data[0]
+
+  if (!credentials.employee_id) {
+    throw new Error('Employee ID not found in credentials')
+  }
+
+  console.log('[Factorial API] ✓ Employee ID found:', credentials.employee_id)
+  return credentials.employee_id
 }
 
 /**
