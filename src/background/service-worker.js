@@ -5,6 +5,7 @@ import {
   formatScheduleForDisplay
 } from '../lib/scheduler.js'
 import { TIMING, STORAGE, COOKIES, ERROR_STRINGS, API } from '../lib/constants.js'
+import { formatDateTimeWithTimezone } from '../lib/time-utils.js'
 
 console.log('Factorial Clock: Background service worker loaded')
 
@@ -405,26 +406,6 @@ async function handleApplySchedule(scheduleData) {
 
     throw error
   }
-}
-
-/**
- * Format datetime string to ISO format with timezone
- * Input: "2025-12-30T08:00:00"
- * Output: "2025-12-30T08:00:00+01:00" (with local timezone)
- */
-function formatDateTimeWithTimezone(dateTimeStr) {
-  const date = new Date(dateTimeStr)
-
-  // Get timezone offset in hours and minutes
-  const tzOffset = -date.getTimezoneOffset()
-  const tzHours = Math.floor(Math.abs(tzOffset) / 60)
-  const tzMinutes = Math.abs(tzOffset) % 60
-  const tzSign = tzOffset >= 0 ? '+' : '-'
-
-  const tzString = `${tzSign}${String(tzHours).padStart(2, '0')}:${String(tzMinutes).padStart(2, '0')}`
-
-  // Return ISO string without 'Z' + timezone
-  return dateTimeStr + tzString
 }
 
 /**
