@@ -56,7 +56,7 @@ function Layout({ children, tabs, activeTab, onTabChange }) {
       {/* Footer */}
       <footer className="bg-white border-t border-gray-200 px-6 py-3">
         <p className="text-xs text-gray-500 text-center">
-          v0.1.0 · Made for Factorial HR
+          v0.1.1 · Made for Factorial HR
         </p>
       </footer>
     </div>

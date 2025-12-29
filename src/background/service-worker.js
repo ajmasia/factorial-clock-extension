@@ -111,17 +111,40 @@ async function handleGenerateSchedule(data) {
  * Returns: { tab, wasCreated: boolean }
  */
 async function getFactorialTab() {
+  console.log('[getFactorialTab] Looking for Factorial tabs...')
+
   const tabs = await chrome.tabs.query({
     url: 'https://app.factorialhr.com/*'
   })
 
-  // Check existing tabs
+  console.log(`[getFactorialTab] Found ${tabs.length} Factorial tab(s)`)
+  tabs.forEach((tab, index) => {
+    console.log(`  Tab ${index + 1}: id=${tab.id}, active=${tab.active}, status=${tab.status}, url=${tab.url}`)
+  })
+
+  // Check all existing tabs (don't filter by active, since popup is the active one)
+  console.log(`[getFactorialTab] Checking all tabs for ready content script...`)
   for (const tab of tabs) {
     if (tab.status === 'complete') {
+      console.log(`[getFactorialTab] Testing tab ${tab.id}...`)
       const isReady = await testContentScript(tab.id)
       if (isReady) {
         console.log(`[Service Worker] Using existing Factorial tab ${tab.id}`)
         return { tab, wasCreated: false }
+      } else {
+        // If tab exists but content script isn't ready, try to inject it
+        console.log(`[getFactorialTab] Tab ${tab.id} exists but content script not ready, attempting reload...`)
+        try {
+          await chrome.tabs.reload(tab.id)
+          await new Promise(resolve => setTimeout(resolve, TIMING.CONTENT_SCRIPT_READY_DELAY))
+          const isReadyAfterReload = await testContentScript(tab.id)
+          if (isReadyAfterReload) {
+            console.log(`[Service Worker] Using Factorial tab ${tab.id} after reload`)
+            return { tab, wasCreated: false }
+          }
+        } catch (error) {
+          console.log(`[getFactorialTab] Failed to reload tab ${tab.id}:`, error)
+        }
       }
     }
   }
@@ -161,8 +184,11 @@ async function testContentScript(tabId) {
     // First verify the tab still exists
     const tab = await chrome.tabs.get(tabId).catch(() => null)
     if (!tab) {
+      console.log(`[testContentScript] Tab ${tabId} does not exist`)
       return false
     }
+
+    console.log(`[testContentScript] Testing tab ${tabId} - URL: ${tab.url}, status: ${tab.status}`)
 
     return new Promise(resolve => {
       chrome.tabs.sendMessage(
@@ -170,21 +196,24 @@ async function testContentScript(tabId) {
         { action: 'ping' },
         (response) => {
           if (chrome.runtime.lastError) {
-            // Silently fail - this is expected when content script isn't loaded
+            // Content script not loaded or not responding
+            console.log(`[testContentScript] Tab ${tabId} - No response: ${chrome.runtime.lastError.message}`)
             resolve(false)
             return
           }
 
           if (response && response.success && response.data === 'pong') {
-            console.log('[testContentScript] Content script is ready')
+            console.log(`[testContentScript] Tab ${tabId} - Content script is ready ✓`)
             resolve(true)
           } else {
+            console.log(`[testContentScript] Tab ${tabId} - Invalid response:`, response)
             resolve(false)
           }
         }
       )
     })
   } catch (error) {
+    console.log(`[testContentScript] Error testing tab ${tabId}:`, error)
     return false
   }
 }
