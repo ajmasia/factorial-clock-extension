@@ -1,6 +1,6 @@
 {
   "name": "factorial-clock-extension",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "Browser extension for Factorial time tracking - Generate and manage weekly schedules",
   "type": "module",
   "scripts": {
