@@ -473,7 +473,7 @@ function ExceptionsPage() {
           </div>
         ) : (
           getFilteredExceptions()
-            .sort((a, b) => new Date(a.date) - new Date(b.date))
+            .sort((a, b) => new Date(b.date) - new Date(a.date))
             .map((exception) => (
               <div key={exception.id}>
                 {editingId === exception.id ? (
