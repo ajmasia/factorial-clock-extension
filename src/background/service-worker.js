@@ -16,8 +16,7 @@ const DEFAULT_CONFIG = {
   lunchDuration: { min: 45, max: 60 },
   splitShiftDays: [1, 2, 3], // Mon, Tue, Wed
   randomVariance: 5,
-  employeeId: '', // Employee ID number (required)
-  sessionCookie: '', // _factorial_session_v2 cookie value (required)
+  employeeId: '', // Employee ID number (auto-detected from Factorial)
 }
 
 // Handle extension installation
@@ -104,52 +103,6 @@ async function handleGenerateSchedule(data) {
     throw error
   }
 }
-
-/**
- * GraphQL mutation for creating shifts
- */
-const CREATE_SHIFT_MUTATION = `
-mutation CreateAttendanceShift($clockIn: ISO8601DateTime, $clockOut: ISO8601DateTime, $date: ISO8601Date!, $employeeId: Int!, $fetchDependencies: Boolean!, $halfDay: String, $locationType: AttendanceShiftLocationTypeEnum, $observations: String, $referenceDate: ISO8601Date!, $source: AttendanceEnumsShiftSourceEnum, $timeSettingsBreakConfigurationId: Int, $workable: Boolean) {
-  attendanceMutations {
-    createAttendanceShift(
-      clockIn: $clockIn
-      clockOut: $clockOut
-      date: $date
-      employeeId: $employeeId
-      halfDay: $halfDay
-      locationType: $locationType
-      observations: $observations
-      referenceDate: $referenceDate
-      source: $source
-      timeSettingsBreakConfigurationId: $timeSettingsBreakConfigurationId
-      workable: $workable
-    ) {
-      errors {
-        ... on SimpleError {
-          message
-          type
-          __typename
-        }
-        ... on StructuredError {
-          field
-          messages
-          __typename
-        }
-        __typename
-      }
-      shift {
-        id
-        clockIn
-        clockOut
-        date
-        __typename
-      }
-      __typename
-    }
-    __typename
-  }
-}
-`
 
 /**
  * Get or create a Factorial tab for sending messages
