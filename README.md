@@ -4,7 +4,7 @@
 
 Modern browser extension that generates realistic weekly work schedules and applies them directly to Factorial's time tracking system.
 
-[![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)](https://github.com/ajmasia/factorial-clock-extension)
+[![Version](https://img.shields.io/badge/version-0.1.3-blue.svg)](https://github.com/ajmasia/factorial-clock-extension)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-green.svg)](https://chrome.google.com/webstore)
 [![Made with React](https://img.shields.io/badge/Made%20with-React-61dafb.svg)](https://reactjs.org/)
