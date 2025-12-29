@@ -6,7 +6,6 @@
   "permissions": [
     "storage",
     "cookies",
-    "notifications",
     "scripting"
   ],
   "host_permissions": [
