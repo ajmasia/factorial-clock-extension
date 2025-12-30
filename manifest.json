@@ -1,12 +1,11 @@
 {
   "manifest_version": 3,
   "name": "Factorial Clock",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Generate and manage weekly schedules for Factorial time tracking",
   "permissions": [
     "storage",
-    "cookies",
-    "scripting"
+    "cookies"
   ],
   "host_permissions": [
     "https://app.factorialhr.com/*",
