@@ -1,0 +1,230 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build extension
+        run: npm run build
+
+  build:
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build extension
+        run: npm run build
+
+      - name: Get version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Create distribution ZIP
+        run: |
+          cd dist
+          zip -r ../factorial-clock-v${{ steps.version.outputs.VERSION }}.zip .
+          cd ..
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: extension-build
+          path: factorial-clock-v${{ steps.version.outputs.VERSION }}.zip
+          if-no-files-found: error
+
+  create-release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: extension-build
+          path: .
+
+      - name: Generate release notes
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          REPO="${{ github.repository }}"
+
+          # Get commits since last tag
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -n "$PREV_TAG" ]; then
+            COMMITS=$(git log --pretty=format:"%s" $PREV_TAG..HEAD --no-merges)
+          else
+            COMMITS=$(git log --pretty=format:"%s" --no-merges -20)
+          fi
+
+          # Initialize category arrays
+          FEATURES=""
+          FIXES=""
+          REFACTORS=""
+          STYLES=""
+          DOCS=""
+          CHORES=""
+          PERFS=""
+          CI=""
+          TESTS=""
+
+          # Categorize each commit
+          while IFS= read -r commit; do
+            [ -z "$commit" ] && continue
+            case "$commit" in
+              feat*) FEATURES="${FEATURES}- ${commit}"$'\n' ;;
+              fix*) FIXES="${FIXES}- ${commit}"$'\n' ;;
+              refactor*) REFACTORS="${REFACTORS}- ${commit}"$'\n' ;;
+              style*) STYLES="${STYLES}- ${commit}"$'\n' ;;
+              docs*) DOCS="${DOCS}- ${commit}"$'\n' ;;
+              chore*) CHORES="${CHORES}- ${commit}"$'\n' ;;
+              perf*) PERFS="${PERFS}- ${commit}"$'\n' ;;
+              ci*) CI="${CI}- ${commit}"$'\n' ;;
+              test*) TESTS="${TESTS}- ${commit}"$'\n' ;;
+            esac
+          done <<< "$COMMITS"
+
+          # Build the changelog
+          {
+            echo "## What's Changed"
+            echo ""
+
+            if [ -n "$FEATURES" ]; then
+              echo "### ✨ New Features"
+              echo ""
+              printf "%s" "$FEATURES"
+              echo ""
+            fi
+
+            if [ -n "$FIXES" ]; then
+              echo "### 🐛 Bug Fixes"
+              echo ""
+              printf "%s" "$FIXES"
+              echo ""
+            fi
+
+            if [ -n "$PERFS" ]; then
+              echo "### ⚡ Performance"
+              echo ""
+              printf "%s" "$PERFS"
+              echo ""
+            fi
+
+            if [ -n "$REFACTORS" ]; then
+              echo "### ♻️ Refactors"
+              echo ""
+              printf "%s" "$REFACTORS"
+              echo ""
+            fi
+
+            if [ -n "$STYLES" ]; then
+              echo "### 💄 Styles"
+              echo ""
+              printf "%s" "$STYLES"
+              echo ""
+            fi
+
+            if [ -n "$DOCS" ]; then
+              echo "### 📚 Documentation"
+              echo ""
+              printf "%s" "$DOCS"
+              echo ""
+            fi
+
+            if [ -n "$TESTS" ]; then
+              echo "### 🧪 Tests"
+              echo ""
+              printf "%s" "$TESTS"
+              echo ""
+            fi
+
+            if [ -n "$CI" ]; then
+              echo "### 🔄 CI/CD"
+              echo ""
+              printf "%s" "$CI"
+              echo ""
+            fi
+
+            if [ -n "$CHORES" ]; then
+              echo "### 🔧 Maintenance"
+              echo ""
+              printf "%s" "$CHORES"
+              echo ""
+            fi
+
+            echo "## 📦 Installation"
+            echo ""
+            echo "### Chrome Web Store"
+            echo "Install directly from the [Chrome Web Store](#) (recommended)"
+            echo ""
+            echo "### Manual Installation"
+            echo "1. Download \`factorial-clock-v${VERSION}.zip\`"
+            echo "2. Unzip the file"
+            echo "3. Open Chrome and navigate to \`chrome://extensions/\`"
+            echo "4. Enable \"Developer mode\" (toggle in top right)"
+            echo "5. Click \"Load unpacked\""
+            echo "6. Select the unzipped folder"
+            echo ""
+            echo "## 🔑 Required Permissions"
+            echo "- **storage**: Save configuration and history locally"
+            echo "- **cookies**: Read Factorial session for API authentication"
+            echo "- **scripting**: Inject content script on Factorial pages"
+            echo "- **host_permissions**: Access factorialhr.com for API calls"
+            echo ""
+            echo "## ⚠️ Disclaimer"
+            echo ""
+            echo "This extension is provided \"AS IS\" without warranties. By using Factorial Clock, you acknowledge that you are solely responsible for ensuring compliance with your employer's time tracking policies and local labor laws. Use at your own risk."
+            echo ""
+            echo "---"
+            echo ""
+            echo "📄 **License**: GPL-3.0 | 🐛 **Issues**: [Report a bug](https://github.com/${REPO}/issues)"
+          } > release_notes.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "⏰ Factorial Clock v${{ steps.version.outputs.VERSION }}"
+          files: factorial-clock-v${{ steps.version.outputs.VERSION }}.zip
+          body_path: release_notes.md
+          draft: false
+          prerelease: ${{ contains(github.ref, '-') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
