@@ -112,71 +112,9 @@ The **History** tab shows all previously applied schedules with:
 - Detailed daily breakdown
 - Option to delete entries
 
-## Publishing to Chrome Web Store
-
-### Prerequisites
-
-- Google account with Chrome Web Store developer access ($5 one-time fee)
-- All extension assets (icons, screenshots, descriptions)
-- Privacy policy URL (if collecting user data)
-
-### Steps
-
-1. **Prepare the production build**
-   ```bash
-   npm run build
-   ```
-
-2. **Create a ZIP file**
-   ```bash
-   cd dist
-   zip -r ../factorial-clock-extension.zip .
-   cd ..
-   ```
-
-3. **Go to Chrome Web Store Developer Dashboard**
-   - Visit: https://chrome.google.com/webstore/devconsole
-   - Sign in with your Google account
-   - Pay the $5 developer fee (if first time)
-
-4. **Create a new item**
-   - Click "New Item"
-   - Upload `factorial-clock-extension.zip`
-   - Wait for upload to complete
-
-5. **Fill in store listing details**
-   - **Name**: Factorial Clock
-   - **Summary**: Automate weekly time tracking in Factorial
-   - **Description**: (Detailed description of features)
-   - **Category**: Productivity
-   - **Language**: English (and others if needed)
-
-6. **Add assets**
-   - **Icon**: 128x128px (use `src/assets/icons/icon128.png`)
-   - **Screenshots**: At least 1 screenshot (1280x800 or 640x400)
-   - **Promotional tile**: 440x280px (optional but recommended)
-
-7. **Set privacy settings**
-   - Declare permissions usage
-   - Add privacy policy URL (if applicable)
-   - Confirm data handling practices
-
-8. **Submit for review**
-   - Click "Submit for review"
-   - Review typically takes 1-3 business days
-   - You'll receive email notification when approved
-
-### Publishing Updates
-
-1. Build new version with updated version number in `manifest.json`
-2. Create new ZIP file
-3. Go to your item in the dashboard
-4. Click "Upload updated package"
-5. Submit for review
-
-**Note**: Updates are also reviewed but typically faster than initial submission.
-
 ## Development
+
+**Note for Developers**: For release and publishing instructions, see [RELEASING.md](RELEASING.md)
 
 ### Project Structure
 
