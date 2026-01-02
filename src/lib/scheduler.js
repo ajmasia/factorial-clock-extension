@@ -198,8 +198,8 @@ export function getWeekDates(weekStart) {
  * Check if date is a work day
  */
 export function isWorkDay(dateStr, workDays, exceptions = []) {
-  // Check if date is in exceptions (single date or date range)
-  const exception = exceptions.find(e => {
+  // Find ALL exceptions that match this date (not just the first one)
+  const matchingExceptions = exceptions.filter(e => {
     // Single date exception
     if (e.date === dateStr) return true
 
@@ -211,16 +211,17 @@ export function isWorkDay(dateStr, workDays, exceptions = []) {
     return false
   })
 
-  if (exception) {
-    // special_week doesn't exclude the day, just modifies weekly hours
-    if (exception.type === 'special_week') {
-      const dayOfWeek = getDayOfWeek(dateStr)
-      return workDays.includes(dayOfWeek)
-    }
-    // Other exceptions (holiday, vacation, sick, other) exclude the day
+  // Check if any exception excludes this day (holiday, vacation, sick, other)
+  // These take priority over special_week
+  const hasExcludingException = matchingExceptions.some(
+    e => e.type !== 'special_week'
+  )
+
+  if (hasExcludingException) {
     return false
   }
 
+  // Only special_week exceptions (or no exceptions) - check normal work days
   const dayOfWeek = getDayOfWeek(dateStr)
   return workDays.includes(dayOfWeek)
 }
