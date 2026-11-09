@@ -233,6 +233,32 @@ export function isWorkDay(dateStr, workDays, exceptions = []) {
 }
 
 /**
+ * Find the special week that applies to a week (#13).
+ * A special week applies to the whole week when its date range (date … endDate, or the single date)
+ * overlaps any day of it. If several overlap, the one covering the most days of the week wins;
+ * on a tie, the one starting later.
+ * @param {string[]} weekDates - The seven YYYY-MM-DD dates of the week
+ * @param {array} exceptions - Array of exception objects
+ * @returns {object|undefined} The applying special_week exception, if any
+ */
+export function findSpecialWeek(weekDates, exceptions = []) {
+  let best
+  let bestDays = 0
+  for (const e of exceptions) {
+    if (e.type !== 'special_week') continue
+    // A missing or inverted endDate (not stored by the UI) falls back to the single date
+    const end = e.endDate && e.endDate >= e.date ? e.endDate : e.date
+    const days = weekDates.filter((d) => d >= e.date && d <= end).length
+    if (days === 0) continue
+    if (days > bestDays || (days === bestDays && e.date > best.date)) {
+      best = e
+      bestDays = days
+    }
+  }
+  return best
+}
+
+/**
  * Generate random schedule for a week
  * EXACT PORT of random::generate_weekly_schedule from random.sh
  * @param {string} weekStart - Week start date in YYYY-MM-DD format (Monday)
@@ -245,9 +271,7 @@ export function generateWeeklySchedule(weekStart, config, exceptions = []) {
   const allDates = getWeekDates(weekStart)
 
   // Check if this week has a special_week exception (modifies weekly hours)
-  const specialWeekException = exceptions.find(
-    e => e.type === 'special_week' && allDates.includes(e.date)
-  )
+  const specialWeekException = findSpecialWeek(allDates, exceptions)
 
   // Use special week hours if available, otherwise use default
   const weeklyHours = specialWeekException
