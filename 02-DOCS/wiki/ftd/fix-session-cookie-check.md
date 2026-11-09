@@ -1,7 +1,7 @@
 ---
 author: Antonio Masiá
 branch: 2-applying-a-schedule-fails-with-not-authenticated-while-logged-in-to-factorial
-status: in-progress
+status: done
 ---
 # Fix: apply aborts because the session cookie was renamed
 
@@ -55,5 +55,4 @@ Out:
 
 ## Next
 
-Commit the fix on the issue #2 branch, bump to 0.1.7, open the PR; tag `v0.1.7` after merge. Follow-ups, each its own feature: logged-out UX (reviewer risks 1-2), history quota
-in `chrome.storage.sync`, timeout for the new Factorial tab, version bump and Web Store release.
+Merged in PR #3, released in v0.1.7 (2026-11-09).

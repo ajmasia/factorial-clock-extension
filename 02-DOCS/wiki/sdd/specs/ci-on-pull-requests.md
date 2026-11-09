@@ -8,12 +8,12 @@ topic: sdd
 slug: ci-on-pull-requests
 branch: 15-run-build-and-tests-on-pull-requests
 issue: 15
-status: draft
+status: planned
 ---
 
 # Spec — CI on pull requests
 
-> Slug: `ci-on-pull-requests` · Status: draft · Created: 2026-11-09 · Issue: #15
+> Slug: `ci-on-pull-requests` · Status: implemented in PR #31 (all four acceptance criteria verified, see the FTD document) · Created: 2026-11-09 · Issue: #15
 > Inherits: [constitution](../constitution.md) — still a draft, so no principles are inherited (see Points to clarify).
 > Promoted from the FTD document `02-DOCS/wiki/ftd/ci-on-pull-requests.md` because `rsc risk` rates CI changes tier 2.
 > Written after the change was drafted: it records the contract the drafted change must meet.

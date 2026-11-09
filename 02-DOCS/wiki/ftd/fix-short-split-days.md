@@ -1,7 +1,7 @@
 ---
 author: Antonio Masiá
 branch: 12-short-days-with-split-shifts-generate-invalid-shifts
-status: in-progress
+status: done
 ---
 # Fix: short days with split shifts generate invalid shifts (#12)
 
@@ -34,7 +34,7 @@ Out:
 - [x] #12 test passes without `.fails` — proof: `npm test`.
 - [x] Split days keep ≥ 60 min after lunch and lunch inside the configured range — proof: invariant tests over many runs and configs.
 - [x] Default 40 h week still splits Mon–Wed — proof: test over many runs.
-- [ ] Full suite, build, CI — proof: `npm test`, `npm run build`, PR check.
+- [x] Full suite, build, CI — proof: `npm test`, `npm run build`, PR check.
 
 ## Evidence
 
@@ -51,4 +51,4 @@ Out:
 
 ## Next
 
-Commit with `Fixes #12`, bump to 0.1.10, PR and CI.
+Merged in PR #34, released in v0.1.10 (2026-11-09).

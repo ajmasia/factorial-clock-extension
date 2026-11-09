@@ -1,7 +1,7 @@
 ---
 author: Antonio Masiá
 branch: 4-history-stops-saving-after-the-fourth-applied-week-chromestoragesync-quota
-status: in-progress
+status: done
 ---
 # Fix: history stops saving after the fourth applied week (#4)
 
@@ -60,5 +60,4 @@ Out:
 
 ## Next
 
-Commit with `Fixes #4` and open the PR. Follow-ups: exceptions in a single sync key; "Failed to apply"
-shown when only the history save rejects.
+Merged in PR #6, released in v0.1.8 (2026-11-09).

@@ -1,7 +1,7 @@
 ---
 author: Antonio Masiá
 branch: 11-opening-the-config-tab-can-overwrite-the-saved-configuration-with-defaults
-status: in-progress
+status: done
 ---
 # Fix: opening Config overwrites the saved configuration (#11)
 
@@ -33,7 +33,7 @@ Out:
 - [x] Old behaviour shown wrong — proof: the same test applied to the old write (`{ ...defaults, employeeId }`) fails.
 - [x] Full suite and build — proof: `npm test` and `npm run build` pass.
 - [x] Real extension — proof: user retest with the `chrome.storage.onChanged` listener: opening Config writes only `employeeId` (or nothing), weekly hours unchanged.
-- [ ] CI green on the PR.
+- [x] CI green on the PR.
 
 ## Evidence
 
@@ -57,4 +57,4 @@ Out:
 
 ## Next
 
-CI on the PR, merge, tag `v0.1.9`.
+Merged in PR #33, released in v0.1.9 (2026-11-09).
