@@ -3,6 +3,9 @@
  * This is an EXACT port of the CLI algorithm
  */
 
+// Minimum work after lunch for a day to stay a split shift (#12)
+export const MIN_AFTERNOON_MINUTES = 60
+
 /**
  * Convert time HH:MM to minutes since midnight
  */
@@ -83,7 +86,7 @@ export function generateDailySchedule(date, targetHours, config, forceSplitShift
 
   // Check if it's a split shift day
   // Use forceSplitShift if provided (from special week config), otherwise use global config
-  const isSplit = forceSplitShift !== null
+  let isSplit = forceSplitShift !== null
     ? forceSplitShift
     : isSplitShiftDay(date, config.splitShiftDays)
 
@@ -92,54 +95,57 @@ export function generateDailySchedule(date, targetHours, config, forceSplitShift
   let lunchEndDatetime = null
   let clockOutTime = ''
 
+  // A split day needs at least MIN_AFTERNOON_MINUTES of work after lunch (#12).
+  // Lunch starts within the configured range, no later than the time that still leaves that
+  // afternoon. If even the earliest lunch in the range leaves less, the day becomes continuous.
+  let earliestLunch = 0
+  let latestLunch = 0
+  if (isSplit) {
+    earliestLunch = Math.max(timeToMinutes(config.lunchStartRange.start), clockInMinutes + 1)
+    latestLunch = Math.min(
+      timeToMinutes(config.lunchStartRange.end),
+      clockInMinutes + targetMinutes - MIN_AFTERNOON_MINUTES
+    )
+    if (latestLunch < earliestLunch) {
+      isSplit = false
+    }
+  }
+
   if (isSplit) {
     // Split shift: with lunch break
 
-    // Generate random lunch start time within configured range
-    // Always respect the user's configured lunch time preference (from CLI)
-    const lunchTimeMinutes = getRandomNumber(
-      timeToMinutes(config.lunchStartRange.start),
-      timeToMinutes(config.lunchStartRange.end)
-    )
+    // Random lunch start within the configured range, capped as computed above
+    const lunchTimeMinutes = getRandomNumber(earliestLunch, latestLunch)
     const lunchTime = minutesToTime(lunchTimeMinutes)
 
     // Generate random lunch duration
-    const lunchDuration = getRandomNumber(
+    let lunchDuration = getRandomNumber(
       config.lunchDuration.min,
       config.lunchDuration.max
     )
 
-    // Calculate lunch end
-    const lunchEndTimeMinutes = lunchTimeMinutes + lunchDuration
-    const lunchEndTime = minutesToTime(lunchEndTimeMinutes)
-
-    lunchStartDatetime = `${date}T${lunchTime}:00`
-    lunchEndDatetime = `${date}T${lunchEndTime}:00`
-
-    // Calculate clock out time properly:
-    // 1. Calculate work time before lunch
-    // 2. Calculate remaining work time after lunch
-    // 3. Clock out = lunch_end + remaining work
+    // Work after lunch is at least MIN_AFTERNOON_MINUTES (lunch start was capped above)
     const workBeforeLunch = lunchTimeMinutes - clockInMinutes
     const workAfterLunch = targetMinutes - workBeforeLunch
 
-    // Ensure we have positive work time after lunch
-    const validWorkAfterLunch = Math.max(0, workAfterLunch)
-
-    let clockOutMinutes = lunchEndTimeMinutes + validWorkAfterLunch
-
-    // For split shifts only: ensure checkout minutes don't match checkin minutes
-    const checkinMinutePart = parseInt(clockInTime.split(':')[1])
-    const checkoutMinutePart = clockOutMinutes % 60
-
-    if (checkinMinutePart === checkoutMinutePart) {
-      // Add 1-3 minutes to avoid matching
+    // Avoid a checkout on the same minute as the check-in: change the lunch length by 1-3 min
+    // (within the configured duration range), which moves the checkout without changing the
+    // worked minutes, so the weekly total stays exact.
+    const checkinMinutePart = clockInMinutes % 60
+    if ((lunchTimeMinutes + lunchDuration + workAfterLunch) % 60 === checkinMinutePart) {
       const adjustment = getRandomNumber(1, 3)
-      clockOutMinutes += adjustment
+      if (lunchDuration + adjustment <= config.lunchDuration.max) {
+        lunchDuration += adjustment
+      } else if (lunchDuration - adjustment >= config.lunchDuration.min) {
+        lunchDuration -= adjustment
+      }
     }
 
-    // No variance added to clock out to maintain exact total hours
-    clockOutTime = minutesToTime(clockOutMinutes)
+    const lunchEndTimeMinutes = lunchTimeMinutes + lunchDuration
+    lunchStartDatetime = `${date}T${lunchTime}:00`
+    lunchEndDatetime = `${date}T${minutesToTime(lunchEndTimeMinutes)}:00`
+
+    clockOutTime = minutesToTime(lunchEndTimeMinutes + workAfterLunch)
   } else {
     // Continuous shift: no lunch break
 

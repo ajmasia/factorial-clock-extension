@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import {
+  generateDailySchedule,
   timeToMinutes,
   minutesToTime,
   getDayOfWeek,
@@ -7,6 +8,7 @@ import {
   isWorkDay,
   generateWeeklySchedule,
   calculateTotalHours,
+  MIN_AFTERNOON_MINUTES,
 } from './scheduler.js'
 
 // Monday 2026-11-09 … Sunday 2026-11-15
@@ -174,15 +176,134 @@ describe('generateWeeklySchedule', () => {
     expect(schedule.every((d) => d.type === 'continuous')).toBe(true)
   })
 
-  // Known bug #12: when the daily target is shorter than clock-in → lunch, the afternoon block
-  // becomes 0 minutes and the last day gets a negative duration. Remove `.fails` when #12 is fixed.
-  it.fails('produces valid days for a 25 h week with split shifts (#12)', () => {
+  it('produces valid days for a 25 h week with split shifts (#12)', () => {
     const { invalid, totals } = sample({ ...BASE_CONFIG, weeklyHours: 25 })
-    // The total is already right today; it stays asserted so a fix cannot trade it for validity.
     expect(totals).toEqual([25 * 60])
     expect(invalid).toEqual([])
   })
 
+  it('turns days too short for a split shift into continuous days (#12)', () => {
+    // 25 h: split days get about 5.5 h; from ~07:15 even a 14:00 lunch leaves no afternoon.
+    for (let i = 0; i < RUNS; i++) {
+      const schedule = generateWeeklySchedule(WEEK, { ...BASE_CONFIG, weeklyHours: 25 })
+      expect(schedule.every((d) => d.type === 'continuous')).toBe(true)
+    }
+  })
+
+  it('keeps Mon–Wed split in a normal 40 h week (#12)', () => {
+    for (let i = 0; i < RUNS; i++) {
+      const types = generateWeeklySchedule(WEEK, BASE_CONFIG).map((d) => d.type)
+      expect(types).toEqual(['split', 'split', 'split', 'continuous', 'continuous'])
+    }
+  })
+
+  // [weekly hours, whether split days must appear with every day configured as split]
+  // (null: depends on the draws — the last day takes the remainder of the week)
+  it.each([[20, false], [25, false], [30, null], [35, null], [40, true], [45, true]])(
+    'keeps lunch in the configured range and %s h weeks with ≥ 60 min after lunch (#12)',
+    (weeklyHours, expectSplitDays) => {
+      const config = { ...BASE_CONFIG, weeklyHours, splitShiftDays: [1, 2, 3, 4, 5] }
+      const lunchFrom = timeToMinutes(config.lunchStartRange.start)
+      const lunchTo = timeToMinutes(config.lunchStartRange.end)
+      const { invalid, totals } = sample(config)
+      expect(invalid).toEqual([])
+      expect(totals).toEqual([weeklyHours * 60])
+      let splitDays = 0
+      for (let i = 0; i < RUNS; i++) {
+        for (const day of generateWeeklySchedule(WEEK, config)) {
+          if (day.type !== 'split') continue
+          splitDays++
+          const lunchStart = minutesOf(day.lunch_start)
+          expect(lunchStart).toBeGreaterThanOrEqual(lunchFrom)
+          expect(lunchStart).toBeLessThanOrEqual(lunchTo)
+          const lunchLength = minutesOf(day.lunch_end) - lunchStart
+          expect(lunchLength).toBeGreaterThanOrEqual(config.lunchDuration.min)
+          expect(lunchLength).toBeLessThanOrEqual(config.lunchDuration.max)
+          expect(minutesOf(day.checkout) - minutesOf(day.lunch_end)).toBeGreaterThanOrEqual(60)
+        }
+      }
+      if (expectSplitDays !== null) expect(splitDays > 0).toBe(expectSplitDays)
+    },
+  )
+
+})
+
+// Deterministic checks of a single split day (#12). Clock-in is fixed at 07:00 and lunch at 14:00
+// by single-value ranges, so 7 h are worked before lunch; Math.random is stubbed only where a value
+// still has to be chosen (lunch length and the 1-3 min adjustment).
+describe('generateDailySchedule boundaries (#12)', () => {
+  const DATE = '2026-11-09'
+  const FIXED = {
+    ...BASE_CONFIG,
+    clockInRange: { start: '07:00', end: '07:00' },
+    lunchStartRange: { start: '14:00', end: '14:00' },
+    lunchDuration: { min: 45, max: 45 },
+    randomVariance: 0,
+  }
+
+  /** getRandomNumber(min, max) = floor(r * (max - min + 1)) + min; returns the r picking `value`. */
+  const pick = (value, min, max) => (value - min + 0.5) / (max - min + 1)
+
+  /** Stub Math.random for the draws in order: clock-in, variance, lunch start, lunch length, adjustment. */
+  function stubRandom(values) {
+    let i = 0
+    vi.spyOn(Math, 'random').mockImplementation(() => (i < values.length ? values[i++] : 0))
+  }
+
+  afterEach(() => vi.restoreAllMocks())
+
+  it('stays split with exactly 60 min after lunch', () => {
+    const day = generateDailySchedule(DATE, 8, FIXED, true) // 480 min: 420 before lunch, 60 after
+    expect(day.type).toBe('split')
+    expect(day.lunch_start).toBe(`${DATE}T14:00:00`)
+    expect(minutesOf(day.checkout) - minutesOf(day.lunch_end)).toBe(60)
+  })
+
+  it('becomes continuous with 59 min after lunch', () => {
+    const day = generateDailySchedule(DATE, 479 / 60, FIXED, true)
+    expect(day.type).toBe('continuous')
+    expect(day.checkout).toBe(`${DATE}T14:59:00`)
+  })
+
+  it('never starts lunch at the check-in minute when the lunch range overlaps check-in', () => {
+    stubRandom([0, 0, 0, 0, 0]) // lowest lunch start allowed
+    const config = { ...FIXED, lunchStartRange: { start: '06:00', end: '07:30' } }
+    const day = generateDailySchedule(DATE, 8, config, true)
+    expect(day.type).toBe('split')
+    expect(minutesOf(day.lunch_start)).toBeGreaterThan(minutesOf(day.checkin))
+  })
+
+  it('lengthens lunch up to exactly the maximum to avoid a matching checkout minute', () => {
+    // Lunch 57 min (range 45-60), afternoon 63 min → checkout 16:00 matches check-in :00.
+    // Adjustment 3 → 57 + 3 = 60 = max is allowed → checkout 16:03.
+    const config = { ...FIXED, lunchDuration: { min: 45, max: 60 } }
+    stubRandom([0, 0, 0, pick(57, 45, 60), pick(3, 1, 3)])
+    const day = generateDailySchedule(DATE, 483 / 60, config, true)
+    expect(minutesOf(day.lunch_end) - minutesOf(day.lunch_start)).toBe(60)
+    expect(day.checkout).toBe(`${DATE}T16:03:00`)
+  })
+
+  it('shortens lunch down to exactly the minimum when lengthening would exceed the maximum', () => {
+    // Lunch 48 min (range 45-50), afternoon 72 min → checkout 16:00 matches. 48 + 3 > 50, 48 - 3 = 45 = min.
+    const config = { ...FIXED, lunchDuration: { min: 45, max: 50 } }
+    stubRandom([0, 0, 0, pick(48, 45, 50), pick(3, 1, 3)])
+    const day = generateDailySchedule(DATE, 492 / 60, config, true) // 420 before lunch + 72 after
+    expect(minutesOf(day.lunch_end) - minutesOf(day.lunch_start)).toBe(45)
+    expect(day.checkout).toBe(`${DATE}T15:57:00`)
+  })
+
+  it('keeps the matching minute when no lunch length in the range can absorb the adjustment', () => {
+    // Fixed 60 min lunch: neither 63 nor 57 fits, so lunch stays 60 and the checkout keeps :00.
+    // Accepted trade-off: worked minutes stay exact.
+    const config = { ...FIXED, lunchDuration: { min: 60, max: 60 } }
+    stubRandom([0, 0, 0, 0, pick(3, 1, 3)])
+    const day = generateDailySchedule(DATE, 480 / 60, config, true) // afternoon 60 → 16:00
+    expect(minutesOf(day.lunch_end) - minutesOf(day.lunch_start)).toBe(60)
+    expect(day.checkout).toBe(`${DATE}T16:00:00`)
+  })
+})
+
+describe('known bugs', () => {
   // Known bug #13: a special week range only applies to the week of its start date.
   // Remove `.fails` when #13 is fixed.
   it.fails('applies a special week range to every week it covers (#13)', () => {
