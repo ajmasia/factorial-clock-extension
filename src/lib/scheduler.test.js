@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import {
   generateDailySchedule,
+  findSpecialWeek,
   timeToMinutes,
   minutesToTime,
   getDayOfWeek,
@@ -303,14 +304,79 @@ describe('generateDailySchedule boundaries (#12)', () => {
   })
 })
 
-describe('known bugs', () => {
-  // Known bug #13: a special week range only applies to the week of its start date.
-  // Remove `.fails` when #13 is fixed.
-  it.fails('applies a special week range to every week it covers (#13)', () => {
-    const exceptions = [
-      { date: '2026-11-02', endDate: '2026-11-15', type: 'special_week', weeklyHours: 30, splitDays: [] },
-    ]
+describe('special week ranges (#13)', () => {
+  const special = (date, endDate, weeklyHours, id = date) =>
+    ({ id, date, endDate, type: 'special_week', weeklyHours, splitDays: [] })
+  const weekTotal = (weekStart, exceptions) =>
+    calculateTotalHours(generateWeeklySchedule(weekStart, BASE_CONFIG, exceptions)).totalMinutes
+
+  it('applies a special week range to every week it covers', () => {
+    const exceptions = [special('2026-11-02', '2026-11-15', 30)]
+    expect(weekTotal(WEEK, exceptions)).toBe(30 * 60)
+  })
+
+  it('applies a three-week range to its first, middle and last week, and not beyond', () => {
+    // Wednesday 2026-11-04 … Tuesday 2026-11-17
+    const exceptions = [special('2026-11-04', '2026-11-17', 30)]
+    expect(weekTotal('2026-10-26', exceptions)).toBe(40 * 60) // week before
+    expect(weekTotal('2026-11-02', exceptions)).toBe(30 * 60) // starts on Wednesday
+    expect(weekTotal('2026-11-09', exceptions)).toBe(30 * 60) // fully covered
+    expect(weekTotal('2026-11-16', exceptions)).toBe(30 * 60) // ends on Tuesday
+    expect(weekTotal('2026-11-23', exceptions)).toBe(40 * 60) // week after
+  })
+
+  it('applies a range that only touches the Monday or the Sunday of a week', () => {
+    expect(weekTotal(WEEK, [special('2026-11-03', '2026-11-09', 30)])).toBe(30 * 60) // ends Monday
+    expect(weekTotal(WEEK, [special('2026-11-15', '2026-11-20', 30)])).toBe(30 * 60) // starts Sunday
+  })
+
+  it('uses the special week split days for every covered week', () => {
+    const exceptions = [{ ...special('2026-11-02', '2026-11-15', 40), splitDays: [] }]
     const schedule = generateWeeklySchedule(WEEK, BASE_CONFIG, exceptions)
-    expect(calculateTotalHours(schedule).totalMinutes).toBe(30 * 60)
+    expect(schedule.every((d) => d.type === 'continuous')).toBe(true)
+  })
+
+  it('picks the special week covering more days of the week when several overlap', () => {
+    const exceptions = [
+      special('2026-11-13', '2026-11-20', 25, 'b'), // Fri–Sun of this week: 3 days
+      special('2026-11-02', '2026-11-11', 30, 'a'), // Mon–Wed of this week: 3 days
+      special('2026-11-01', '2026-11-12', 35, 'c'), // Mon–Thu of this week: 4 days
+    ]
+    expect(findSpecialWeek(getWeekDates(WEEK), exceptions).id).toBe('c')
+    expect(weekTotal(WEEK, exceptions)).toBe(35 * 60)
+  })
+
+  it('breaks a tie in covered days in favour of the later start', () => {
+    const exceptions = [
+      special('2026-11-02', '2026-11-11', 30, 'early'), // Mon–Wed: 3 days
+      special('2026-11-13', '2026-11-20', 25, 'late'), // Fri–Sun: 3 days
+    ]
+    expect(findSpecialWeek(getWeekDates(WEEK), exceptions).id).toBe('late')
+    expect(findSpecialWeek(getWeekDates(WEEK), [...exceptions].reverse()).id).toBe('late')
+  })
+
+  it('applies a range across the turn of the year to both weeks, and not beyond', () => {
+    const exceptions = [special('2026-12-28', '2027-01-10', 30)]
+    expect(weekTotal('2026-12-21', exceptions)).toBe(40 * 60)
+    expect(weekTotal('2026-12-28', exceptions)).toBe(30 * 60)
+    expect(weekTotal('2027-01-04', exceptions)).toBe(30 * 60)
+    expect(weekTotal('2027-01-11', exceptions)).toBe(40 * 60)
+  })
+
+  it('still removes a holiday inside a special week range, scaling the special hours', () => {
+    // 30 h over 5 configured days = 6 h/day; Friday off → 24 h
+    const exceptions = [special('2026-11-02', '2026-11-15', 30), { date: '2026-11-13', type: 'holiday' }]
+    expect(weekTotal(WEEK, exceptions)).toBe(24 * 60)
+  })
+
+  it('treats an inverted range (endDate before date) as its single date', () => {
+    const exceptions = [special('2026-11-10', '2026-11-09', 30)]
+    expect(weekTotal(WEEK, exceptions)).toBe(30 * 60)
+    expect(weekTotal('2026-11-02', exceptions)).toBe(40 * 60)
+  })
+
+  it('ignores special weeks that do not overlap the week', () => {
+    expect(findSpecialWeek(getWeekDates(WEEK), [special('2026-11-16', '2026-11-22', 30)])).toBeUndefined()
+    expect(findSpecialWeek(getWeekDates(WEEK), [{ date: '2026-11-10', type: 'holiday' }])).toBeUndefined()
   })
 })

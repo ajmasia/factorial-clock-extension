@@ -345,22 +345,22 @@ function ExceptionsPage() {
             />
           </div>
 
-          {newException.type !== 'special_week' && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                End Date (Optional)
-              </label>
-              <DatePicker
-                value={newException.endDate}
-                onChange={(date) => setNewException({ ...newException, endDate: date })}
-                onValidChange={setIsEndDateValid}
-                placeholder="Select end date"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Leave empty for single day, or select to create a date range
-              </p>
-            </div>
-          )}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              End Date (Optional)
+            </label>
+            <DatePicker
+              value={newException.endDate}
+              onChange={(date) => setNewException({ ...newException, endDate: date })}
+              onValidChange={setIsEndDateValid}
+              placeholder="Select end date"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              {newException.type === 'special_week'
+                ? 'Leave empty for one week, or select to apply it to every week the range touches'
+                : 'Leave empty for single day, or select to create a date range'}
+            </p>
+          </div>
 
           {newException.type === 'special_week' && (
             <>
@@ -497,13 +497,11 @@ function ExceptionsPage() {
                       <label className="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
                       <DatePicker value={newException.date} onChange={(date) => setNewException({ ...newException, date })} onValidChange={setIsStartDateValid} />
                     </div>
-                    {/* End Date */}
-                    {newException.type !== 'special_week' && (
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">End Date (Optional)</label>
-                        <DatePicker value={newException.endDate} onChange={(date) => setNewException({ ...newException, endDate: date })} onValidChange={setIsEndDateValid} />
-                      </div>
-                    )}
+                    {/* End Date (also for special weeks: the range applies to every week it touches, #13) */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">End Date (Optional)</label>
+                      <DatePicker value={newException.endDate} onChange={(date) => setNewException({ ...newException, endDate: date })} onValidChange={setIsEndDateValid} />
+                    </div>
                     {/* Special week fields */}
                     {newException.type === 'special_week' && (
                       <>
