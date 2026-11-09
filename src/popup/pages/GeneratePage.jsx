@@ -142,13 +142,15 @@ function GeneratePage() {
         })
         console.log('History save response:', historyResponse)
 
+        let historyWarning = ''
         if (historyResponse.success) {
           console.log('Saved to history successfully')
         } else {
           console.error('Failed to save to history:', historyResponse.error)
+          historyWarning = `\n\nWarning: the schedule could not be saved to History (${historyResponse.error || 'unknown error'}).`
         }
 
-        alert(`Schedule applied successfully! ${response.data.shiftsCreated} shifts created.`)
+        alert(`Schedule applied successfully! ${response.data.shiftsCreated} shifts created.${historyWarning}`)
       } else {
         alert(`Error: ${response.error}`)
       }
