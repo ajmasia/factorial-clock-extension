@@ -165,6 +165,10 @@ applying a week from the Generate tab, logged in to Factorial in the same browse
   failed is shown as *skipped*, not *failed*, so the apply messages keep their counts. *Base:* decided by the agent
   after the PR 1 review, under the user's delegation; retries of a failed week would otherwise push real entries
   out of the 50-entry limit. *Riesgo:* a fully failed apply leaves no trace in History.
+- **suposición tomada** — an undone entry stays in History, marked "undone", until the user deletes it. *Base:*
+  user decision on 2026-11-09, following the agent's recommendation: it records what was deleted from an
+  official attendance record, partial undos need the entry for "Retry undo", and History is capped at 50 entries.
+  *Riesgo:* none.
 - **decisión diferida** — verifying before deletion that a stored shift was not edited in Factorial; revisit with #19.
 - **decisión diferida** — ratifying the project constitution (still a draft); this spec inherits no principles
   until then (delegated decision 6).
