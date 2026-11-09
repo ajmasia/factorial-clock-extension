@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { loadHistory as loadStoredHistory, saveHistory } from '../../lib/history-storage.js'
 
 function HistoryPage() {
   const [history, setHistory] = useState([])
@@ -10,17 +11,14 @@ function HistoryPage() {
   }, [])
 
   const loadHistory = async () => {
-    const result = await chrome.storage.sync.get(['history'])
-    if (result.history) {
-      setHistory(result.history)
-    }
+    setHistory(await loadStoredHistory())
   }
 
   const handleDelete = async (id) => {
     if (!confirm('Delete this schedule from history?')) return
 
     const updatedHistory = history.filter(item => item.id !== id)
-    await chrome.storage.sync.set({ history: updatedHistory })
+    await saveHistory(updatedHistory)
     setHistory(updatedHistory)
   }
 

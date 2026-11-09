@@ -6,6 +6,7 @@ import {
 } from '../lib/scheduler.js'
 import { TIMING, STORAGE, ERROR_STRINGS, API } from '../lib/constants.js'
 import { formatDateTimeWithTimezone } from '../lib/time-utils.js'
+import { loadHistory, saveHistory } from '../lib/history-storage.js'
 
 console.log('Factorial Clock: Background service worker loaded')
 
@@ -29,11 +30,12 @@ chrome.runtime.onInstalled.addListener((details) => {
     // Set default configuration
     chrome.storage.sync.set({
       config: DEFAULT_CONFIG,
-      history: [],
       exceptions: []
     }, () => {
       console.log('Default configuration saved')
     })
+    // History is not initialized here: loadHistory() handles a missing key and
+    // migrates any history synced from an older version.
   }
 })
 
@@ -429,8 +431,7 @@ async function handleApplySchedule(scheduleData) {
 async function handleSaveToHistory(scheduleData) {
   console.log('[handleSaveToHistory] Called with:', scheduleData)
   try {
-    const storage = await chrome.storage.sync.get(['history'])
-    const history = storage.history || []
+    const history = await loadHistory()
     console.log('[handleSaveToHistory] Current history length:', history.length)
 
     const historyEntry = {
@@ -449,7 +450,7 @@ async function handleSaveToHistory(scheduleData) {
     // Keep only last N entries
     const trimmedHistory = history.slice(0, STORAGE.MAX_HISTORY_ENTRIES)
 
-    await chrome.storage.sync.set({ history: trimmedHistory })
+    await saveHistory(trimmedHistory)
     console.log('[handleSaveToHistory] Saved to storage successfully')
 
     return historyEntry
