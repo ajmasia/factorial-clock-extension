@@ -4,7 +4,7 @@ import {
   calculateTotalHours,
   formatScheduleForDisplay
 } from '../lib/scheduler.js'
-import { TIMING, STORAGE, COOKIES, ERROR_STRINGS, API } from '../lib/constants.js'
+import { TIMING, STORAGE, ERROR_STRINGS, API } from '../lib/constants.js'
 import { formatDateTimeWithTimezone } from '../lib/time-utils.js'
 
 console.log('Factorial Clock: Background service worker loaded')
@@ -221,7 +221,7 @@ async function testContentScript(tabId) {
 /**
  * Create shift via content script
  */
-async function createShift(tabId, sessionCookie, employeeId, clockIn, clockOut, date) {
+async function createShift(tabId, employeeId, clockIn, clockOut, date) {
   console.log('[createShift]', { employeeId, clockIn, clockOut, date })
 
   return new Promise((resolve, reject) => {
@@ -293,22 +293,8 @@ async function handleApplySchedule(scheduleData) {
 
     console.log('Using Employee ID:', employeeId)
 
-    // Get session cookie
-    const cookies = await chrome.cookies.getAll({
-      domain: '.factorialhr.com',
-      name: COOKIES.FACTORIAL_SESSION
-    })
-
-    if (cookies.length === 0) {
-      await chrome.tabs.create({
-        url: 'https://app.factorialhr.com/',
-        active: true
-      })
-      throw new Error('Not authenticated. Please log in to Factorial in your browser, then try again.')
-    }
-
-    const sessionCookie = cookies[0].value
-    console.log('Session cookie found:', sessionCookie.substring(0, 20) + '...')
+    // Authentication is checked by the Factorial API itself: the content script
+    // sends the browser's cookies and maps an HTTP 401 to a "Not authenticated" error.
 
     let shiftsCreated = 0
     const errors = []
@@ -337,7 +323,7 @@ async function handleApplySchedule(scheduleData) {
           const checkout = formatDateTimeWithTimezone(day.checkout)
 
           console.log(`  Shift 1: ${checkin} -> ${lunchStart}`)
-          const shift1 = await createShift(tab.id, sessionCookie, employeeId, checkin, lunchStart, date)
+          const shift1 = await createShift(tab.id, employeeId, checkin, lunchStart, date)
           console.log(`  Shift 1 created with ID: ${shift1.id}`)
           shiftsCreated++
 
@@ -345,7 +331,7 @@ async function handleApplySchedule(scheduleData) {
           await new Promise(resolve => setTimeout(resolve, TIMING.SHIFT_APPLICATION_DELAY))
 
           console.log(`  Shift 2: ${lunchEnd} -> ${checkout}`)
-          const shift2 = await createShift(tab.id, sessionCookie, employeeId, lunchEnd, checkout, date)
+          const shift2 = await createShift(tab.id, employeeId, lunchEnd, checkout, date)
           console.log(`  Shift 2 created with ID: ${shift2.id}`)
           shiftsCreated++
 
@@ -359,7 +345,7 @@ async function handleApplySchedule(scheduleData) {
           console.log(`  Times: ${checkin} -> ${checkout}`)
           console.log(`  Employee ID: ${employeeId}, Date: ${date}`)
 
-          const shift = await createShift(tab.id, sessionCookie, employeeId, checkin, checkout, date)
+          const shift = await createShift(tab.id, employeeId, checkin, checkout, date)
           console.log(`  Shift created successfully with ID: ${shift.id}`)
           shiftsCreated++
         }

@@ -15,11 +15,6 @@ export const STORAGE = {
   MAX_HISTORY_ENTRIES: 50,  // Maximum number of history entries to keep
 }
 
-// Cookie names
-export const COOKIES = {
-  FACTORIAL_SESSION: '_factorial_session_v2',
-}
-
 // Error message strings
 export const ERROR_STRINGS = {
   SHIFT_OVERLAP: 'overlaps with shift',
