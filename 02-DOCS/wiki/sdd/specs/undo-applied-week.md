@@ -120,18 +120,32 @@ applying a week from the Generate tab, logged in to Factorial in the same browse
 - Given an undo is in progress for an entry, When the user tries to undo the same entry again, Then no second undo
   starts.
 - Given the popup is closed during an undo, When it is reopened, Then History shows the undo's final result.
-- Given a stored shift was already deleted by hand in Factorial, When the week is undone, Then that shift counts as
-  removed, not as a failure. *Depends on the open question: Factorial's response must tell "not found" apart.*
+- Given a stored shift was already deleted by hand in Factorial and other shifts of the week still exist, When the
+  week is undone, Then that shift is shown as not found (probably deleted already), not as a failure.
+- Given Factorial answers every deletion of an undo as not found, When the undo finishes, Then it is reported as
+  "Factorial did not find these shifts" and the user can confirm "Mark as removed" after checking Factorial; only
+  then is the entry marked undone.
 - Given Factorial rejects a deletion with a reason, When the undo finishes, Then that shift is listed as not
   deleted with the reason.
 
 ## Points to clarify
-- **pregunta abierta** — how Factorial answers a deletion: the response on success and on a shift that no longer
-  exists, so "not found" can be told apart from other failures. *Partly answered (2026-11-09, captured by the
-  user from Factorial's web app):* the operation is `DeleteAttendanceShift`, a mutation
-  `attendanceMutations.deleteAttendanceShift(id: ID!)` that returns `errors` (`SimpleError` with `message`, `type`,
-  `code`, or `StructuredError` with `field`, `messages`) and the deleted `shift`. Only the shift identifier is
-  required; the web app's other variables only refresh its own balances view. Still missing: the response bodies.
+- **suposición tomada** — answered on 2026-11-09 (captured by the user from the Factorial console and web app): how Factorial answers a
+  deletion. Operation `attendanceMutations.deleteAttendanceShift(id)`; for this API the `id` argument is an integer
+  (`Int!`; `ID!` is rejected with `variableMismatch`). Success: `errors: []` and `shift` is the deleted shift with
+  the same `id`. A shift that no longer exists: `errors: [{ type: "malformed_request", code: null, message:
+  <localised> }]` and `shift: null` — the same answer as a malformed request.
+- **suposición tomada** — a deletion counts as done only with no errors and `shift.id` equal to the requested
+  identifier. `malformed_request` with `shift: null` is shown as "not found in Factorial (probably deleted already)"
+  and not as a failure, **unless every shift of the undo answers that way**: then it is reported as "Factorial did
+  not find these shifts", nothing is marked undone, and the user can confirm "Mark as removed" after checking
+  Factorial (the user pointed out that a week may already be deleted by hand, 2026-11-09). *Base:* Factorial does not distinguish "not
+  found" from a malformed request; a broken request is far likelier than a whole week deleted by hand (decided by
+  the agent under the user's delegation). *Riesgo:* a week whose shifts were all deleted by hand needs one extra
+  confirmation from the user.
+- **suposición tomada** — Factorial returns `clockIn`/`clockOut` with the current date and `+00:00` but the right
+  wall-clock time (for example a shift dated 2026-11-06 comes back as `2026-11-09T07:31:00+00:00`), while the
+  extension sends `2026-11-06T07:31:00+01:00`. *Base:* observed on 2026-11-09; shifts appear on their day in
+  Factorial. *Riesgo:* none for undo, which deletes by identifier and shows the times the extension stored.
 - **suposición tomada** — scope is #18 alone, without #19. *Base:* delegated decision 1; #19 needs reading shifts
   from Factorial, a separate capability. *Riesgo:* low; #19 can reuse the stored identifiers later.
 - **suposición tomada** — undo works per week, not per day. *Base:* delegated decision 2. *Riesgo:* a user who
@@ -151,6 +165,10 @@ applying a week from the Generate tab, logged in to Factorial in the same browse
   failed is shown as *skipped*, not *failed*, so the apply messages keep their counts. *Base:* decided by the agent
   after the PR 1 review, under the user's delegation; retries of a failed week would otherwise push real entries
   out of the 50-entry limit. *Riesgo:* a fully failed apply leaves no trace in History.
+- **suposición tomada** — an undone entry stays in History, marked "undone", until the user deletes it. *Base:*
+  user decision on 2026-11-09, following the agent's recommendation: it records what was deleted from an
+  official attendance record, partial undos need the entry for "Retry undo", and History is capped at 50 entries.
+  *Riesgo:* none.
 - **decisión diferida** — verifying before deletion that a stored shift was not edited in Factorial; revisit with #19.
 - **decisión diferida** — ratifying the project constitution (still a draft); this spec inherits no principles
   until then (delegated decision 6).

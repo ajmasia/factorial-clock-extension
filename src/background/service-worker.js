@@ -9,6 +9,16 @@ import { planShifts, summarizeDays, buildHistoryEntry, SHIFT_STATUS } from '../l
 import { loadHistory, saveHistory } from '../lib/history-storage.js'
 import { DEFAULT_CONFIG } from '../lib/config-storage.js'
 import { isOverlapError } from '../lib/factorial-errors.js'
+import {
+  undoTargets,
+  canUndo,
+  classifyDeleteResponse,
+  resolveUndoResults,
+  applyUndoOutcome,
+  summarizeUndo,
+  markNotFoundByUser,
+  UNDO_STATUS
+} from '../lib/undo.js'
 
 console.log('Factorial Clock: Background service worker loaded')
 
@@ -42,6 +52,18 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     case 'applySchedule':
       handleApplySchedule(request.data)
+        .then(result => sendResponse({ success: true, data: result }))
+        .catch(error => sendResponse({ success: false, error: error.message }))
+      return true
+
+    case 'undoWeek':
+      handleUndoWeek(request.data)
+        .then(result => sendResponse({ success: true, data: result }))
+        .catch(error => sendResponse({ success: false, error: error.message }))
+      return true
+
+    case 'markUndoRemoved':
+      handleMarkUndoRemoved(request.data)
         .then(result => sendResponse({ success: true, data: result }))
         .catch(error => sendResponse({ success: false, error: error.message }))
       return true
@@ -418,6 +440,133 @@ async function handleApplySchedule(scheduleData) {
     }
     throw error
   }
+}
+
+/**
+ * Replace one History entry by id (re-reading History so concurrent changes are kept).
+ */
+async function updateHistoryEntry(entryId, update) {
+  const history = await loadHistory()
+  const index = history.findIndex(e => e.id === entryId)
+  if (index === -1) throw new Error('History entry not found')
+  history[index] = update(history[index])
+  await saveHistory(history)
+  return history[index]
+}
+
+/**
+ * Delete in Factorial the shifts an applied week created (#18). Only shifts with a stored identifier
+ * are deleted. The progress is recorded in History, so closing the popup does not lose the result,
+ * and the same entry cannot be undone twice at the same time.
+ */
+// Entries being undone by this service worker; checked and set before any await, so two messages
+// for the same entry cannot both start an undo
+const undoLocks = new Set()
+
+async function handleUndoWeek({ entryId }) {
+  if (undoLocks.has(entryId)) throw new Error('An undo is already in progress for this week.')
+  undoLocks.add(entryId)
+  try {
+    return await runUndoWeek(entryId)
+  } finally {
+    undoLocks.delete(entryId)
+  }
+}
+
+async function runUndoWeek(entryId) {
+  const history = await loadHistory()
+  const entry = history.find(e => e.id === entryId)
+  if (!entry) throw new Error('History entry not found')
+  if (!canUndo(entry)) {
+    throw new Error(entry.undo?.status === UNDO_STATUS.IN_PROGRESS
+      ? 'An undo is already in progress for this week.'
+      : 'Nothing to undo for this week.')
+  }
+
+  const previousUndo = entry.undo || null
+  const targets = undoTargets(entry)
+  await updateHistoryEntry(entryId, e => ({ ...e, undo: { status: UNDO_STATUS.IN_PROGRESS, startedAt: new Date().toISOString() } }))
+
+  let tab = null
+  let wasCreated = false
+  let fatalError = null
+  const results = []
+  try {
+    const found = await getFactorialTab()
+    tab = found.tab
+    wasCreated = found.wasCreated
+
+    for (const target of targets) {
+      const response = await sendDeleteShift(tab.id, target.id)
+      const result = classifyDeleteResponse(response, target.id)
+      results.push(result)
+      console.log(`[undo] ${target.date} shift ${target.id}: ${result.status}${result.error ? ` (${result.error})` : ''}`)
+
+      // The request itself failed (logged out, login page, schema change): stop before anything else
+      if (response && response.fatal) {
+        // Not an answer about this shift: it stays a target for a retry
+        results.pop()
+        fatalError = result.error
+        break
+      }
+      await new Promise(resolve => setTimeout(resolve, TIMING.SHIFT_APPLICATION_DELAY))
+    }
+  } catch (error) {
+    console.error('[undo] Failed:', error)
+    fatalError = error.message
+  } finally {
+    if (wasCreated && tab) {
+      await chrome.tabs.remove(tab.id).catch(() => {})
+    }
+  }
+
+  const settled = results
+  const anyRemoved = settled.some(r => r.status !== 'failed')
+  if (fatalError && !anyRemoved) {
+    // Nothing was deleted: leave the entry as it was before the undo
+    await updateHistoryEntry(entryId, e => {
+      const restored = { ...e }
+      if (previousUndo) restored.undo = previousUndo
+      else delete restored.undo
+      return restored
+    })
+    throw new Error(fatalError)
+  }
+
+  // Shifts not reached (stopped early) keep their previous state and stay as targets for a retry
+  const reached = targets.slice(0, settled.length)
+  const outcomes = resolveUndoResults(settled)
+  const updated = await updateHistoryEntry(entryId, e => {
+    const base = { ...e }
+    if (previousUndo) base.undo = previousUndo
+    else delete base.undo
+    return applyUndoOutcome(base, reached, outcomes)
+  })
+
+  return { undo: updated.undo, summary: summarizeUndo(updated), remaining: undoTargets(updated).length }
+}
+
+/**
+ * The user confirmed that the shifts Factorial did not find were deleted by hand (#18).
+ */
+async function handleMarkUndoRemoved({ entryId }) {
+  const updated = await updateHistoryEntry(entryId, e => markNotFoundByUser(e))
+  return { undo: updated.undo, summary: summarizeUndo(updated) }
+}
+
+/**
+ * Ask the content script to delete one shift; resolves with its answer, never rejects for Factorial errors.
+ */
+function sendDeleteShift(tabId, id) {
+  return new Promise((resolve) => {
+    chrome.tabs.sendMessage(tabId, { action: 'deleteShift', data: { id } }, (response) => {
+      if (chrome.runtime.lastError) {
+        resolve({ success: false, error: `Content script not responding: ${chrome.runtime.lastError.message}`, errorType: null, shiftReturned: false })
+        return
+      }
+      resolve(response || { success: false, error: 'No response from content script', errorType: null, shiftReturned: false })
+    })
+  })
 }
 
 /**
