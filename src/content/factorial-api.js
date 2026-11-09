@@ -25,6 +25,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true // Keep channel open for async response
   }
 
+  if (request.action === 'deleteShift') {
+    deleteShift(request.data)
+      .then(result => sendResponse(result))
+      .catch(error => sendResponse({ success: false, error: error.message, errorType: null, errorCode: null, shiftReturned: false, fatal: true }))
+    return true
+  }
+
   if (request.action === 'createShift') {
     console.log('[Factorial API] Creating shift:', request.data)
     createShift(request.data)
@@ -202,4 +209,85 @@ mutation CreateAttendanceShift($clockIn: ISO8601DateTime, $clockOut: ISO8601Date
 
   console.log('[Factorial API] Shift created:', shift.id)
   return shift
+}
+
+/**
+ * Delete a shift via GraphQL (#18). The identifier is sent as an integer: for this API the argument
+ * is `Int!` (an `ID!` variable is rejected with variableMismatch). Never throws for Factorial's answer:
+ * it returns what Factorial said so the service worker can classify it.
+ * @returns {Promise<{success: boolean, data?: {id: string}, error?: string, errorType?: string|null, errorCode?: string|null, shiftReturned: boolean}>}
+ */
+async function deleteShift({ id }) {
+  // Only ids that convert to an integer exactly: a rounded id would point to another shift
+  const text = String(id)
+  const numericId = Number(text)
+  if (!/^\d+$/.test(text) || !Number.isSafeInteger(numericId) || String(numericId) !== text) {
+    return { success: false, error: `Invalid shift identifier: ${id}`, errorType: null, errorCode: null, shiftReturned: false, fatal: false }
+  }
+
+  const response = await fetch('https://api.factorialhr.com/graphql?DeleteAttendanceShift', {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'X-Requested-With': 'XMLHttpRequest'
+    },
+    body: JSON.stringify({
+      operationName: 'DeleteAttendanceShift',
+      variables: { id: numericId },
+      query: `mutation DeleteAttendanceShift($id: Int!) {
+  attendanceMutations {
+    deleteAttendanceShift(id: $id) {
+      errors {
+        ... on SimpleError { message type code __typename }
+        ... on StructuredError { field messages __typename }
+        __typename
+      }
+      shift { id __typename }
+      __typename
+    }
+    __typename
+  }
+}`
+    })
+  })
+
+  // `fatal`: the request itself did not work (logged out, login page, schema change). The service
+  // worker stops the undo; it is never read as "shift not found".
+  if (response.status === 401) {
+    return { success: false, error: 'Not authenticated. Please log in to Factorial in your browser first.', errorType: null, errorCode: null, shiftReturned: false, fatal: true }
+  }
+  if (!response.ok) {
+    return { success: false, error: `HTTP ${response.status}: ${response.statusText}`, errorType: null, errorCode: null, shiftReturned: false, fatal: true }
+  }
+  const contentType = response.headers.get('Content-Type') || ''
+  if (!contentType.includes('application/json')) {
+    return { success: false, error: 'Not authenticated or unexpected response from Factorial. Please log in to Factorial and try again.', errorType: null, errorCode: null, shiftReturned: false, fatal: true }
+  }
+
+  const result = await response.json()
+  if (Array.isArray(result?.errors) && result.errors.length > 0) {
+    return { success: false, error: result.errors[0].message || 'GraphQL error', errorType: 'graphql', errorCode: result.errors[0].extensions?.code || null, shiftReturned: false, fatal: true }
+  }
+
+  const payload = result?.data?.attendanceMutations?.deleteAttendanceShift
+  const errors = payload?.errors || []
+  const shift = payload?.shift || null
+
+  if (errors.length > 0) {
+    const first = errors[0]
+    console.log('[Factorial API] Shift not deleted:', first.messages?.[0] || first.message)
+    return {
+      success: false,
+      error: first.messages?.[0] || first.message || 'Unknown error',
+      errorType: first.type || null,
+      errorCode: first.code || null,
+      shiftReturned: shift !== null
+    }
+  }
+  if (!shift) {
+    return { success: false, error: 'Shift deletion failed: no shift returned', errorType: null, errorCode: null, shiftReturned: false }
+  }
+  return { success: true, data: { id: String(shift.id) }, shiftReturned: true }
 }

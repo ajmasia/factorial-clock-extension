@@ -1,6 +1,14 @@
 import { useState, useEffect } from 'react'
 import { loadHistory as loadStoredHistory, saveHistory } from '../../lib/history-storage.js'
 import { summarizeDays, SHIFT_STATUS } from '../../lib/apply-results.js'
+import { undoTargets, canUndo, canMarkNotFound, isUndoRunning, UNDO_STATUS, UNDO_SHIFT_STATUS } from '../../lib/undo.js'
+
+const UNDO_BADGE = {
+  [UNDO_STATUS.IN_PROGRESS]: { label: 'undoing…', className: 'bg-blue-100 text-blue-700' },
+  [UNDO_STATUS.DONE]: { label: 'undone', className: 'bg-gray-200 text-gray-700' },
+  [UNDO_STATUS.PARTIAL]: { label: 'partially undone', className: 'bg-yellow-100 text-yellow-800' },
+  [UNDO_STATUS.FAILED]: { label: 'undo failed', className: 'bg-red-100 text-red-700' },
+}
 
 const STATUS_BADGE = {
   applied: 'bg-green-100 text-green-700',
@@ -15,19 +23,70 @@ function HistoryPage() {
   const [history, setHistory] = useState([])
   const [expandedId, setExpandedId] = useState(null)
 
-  // Load history from Chrome Storage on mount
+  const [busyId, setBusyId] = useState(null)
+
+  // Load history on mount, and follow changes made by the service worker (an undo in progress, #18)
   useEffect(() => {
     loadHistory()
+    const onChanged = (changes, area) => {
+      if (area === 'local' && changes.history) setHistory(changes.history.newValue || [])
+    }
+    chrome.storage.onChanged.addListener(onChanged)
+    return () => chrome.storage.onChanged.removeListener(onChanged)
   }, [])
+
+  const handleUndo = async (item) => {
+    const targets = undoTargets(item)
+    const list = targets.map((t) => `  ${t.date}  ${timeOf(t.clockIn)} - ${timeOf(t.clockOut)}`).join('\n')
+    const message =
+      `Delete these ${targets.length} shift(s) from Factorial?\n\n${list}\n\n` +
+      'They are deleted even if you edited them in Factorial afterwards. ' +
+      'Shifts you added yourself are not touched.'
+    if (!confirm(message)) return
+
+    setBusyId(item.id)
+    try {
+      const response = await chrome.runtime.sendMessage({ action: 'undoWeek', data: { entryId: item.id } })
+      if (!response.success) {
+        alert(`Undo failed: ${response.error}`)
+      } else {
+        const { summary, remaining } = response.data
+        let text = `Deleted: ${summary.deleted}. Not found in Factorial: ${summary.notFound}.`
+        if (remaining > 0) text += `\n${remaining} shift(s) could not be deleted; see the details and retry.`
+        alert(text)
+      }
+    } catch (error) {
+      alert(`Undo failed: ${error.message}`)
+    } finally {
+      setBusyId(null)
+      loadHistory()
+    }
+  }
+
+  const handleMarkRemoved = async (item) => {
+    const message =
+      'Factorial did not find any of these shifts. Mark them as removed?\n\n' +
+      'Do this only after checking in Factorial that this week has no shifts left from the extension.'
+    if (!confirm(message)) return
+    const response = await chrome.runtime.sendMessage({ action: 'markUndoRemoved', data: { entryId: item.id } })
+    if (!response.success) alert(`Could not update the entry: ${response.error}`)
+    loadHistory()
+  }
 
   const loadHistory = async () => {
     setHistory(await loadStoredHistory())
   }
 
   const handleDelete = async (id) => {
+    const item = history.find(entry => entry.id === id)
+    if (item && isUndoRunning(item)) {
+      alert('This week is being undone. Wait until it finishes before deleting it from History.')
+      return
+    }
     if (!confirm('Delete this schedule from history?')) return
 
-    const updatedHistory = history.filter(item => item.id !== id)
+    // Re-read so changes made meanwhile by the service worker are kept
+    const updatedHistory = (await loadStoredHistory()).filter(entry => entry.id !== id)
     await saveHistory(updatedHistory)
     setHistory(updatedHistory)
   }
@@ -79,6 +138,11 @@ function HistoryPage() {
                     <span className={`px-2 py-0.5 text-xs font-medium rounded ${STATUS_BADGE[item.status] || STATUS_BADGE.applied}`}>
                       {item.status}
                     </span>
+                    {item.undo && UNDO_BADGE[item.undo.status] && (
+                      <span className={`px-2 py-0.5 text-xs font-medium rounded ${UNDO_BADGE[item.undo.status].className}`}>
+                        {UNDO_BADGE[item.undo.status].label}
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center gap-4 mt-2 text-sm text-gray-600">
                     <span>📅 {item.schedule?.length || 0} days</span>
@@ -90,12 +154,31 @@ function HistoryPage() {
                     <span>🕐 {formatDateTime(item.appliedAt)}</span>
                   </div>
                 </div>
-                <button
-                  onClick={() => handleDelete(item.id)}
-                  className="text-red-600 hover:text-red-700 font-medium text-sm ml-3"
-                >
-                  Delete
-                </button>
+                <div className="flex flex-col items-end gap-1 ml-3">
+                  {canUndo(item) && (
+                    <button
+                      onClick={() => handleUndo(item)}
+                      disabled={busyId !== null}
+                      className="text-primary-600 hover:text-primary-700 font-medium text-sm disabled:opacity-50"
+                    >
+                      {busyId === item.id ? 'Undoing…' : item.undo ? 'Retry undo' : 'Undo week'}
+                    </button>
+                  )}
+                  {canMarkNotFound(item) && (
+                    <button
+                      onClick={() => handleMarkRemoved(item)}
+                      className="text-gray-600 hover:text-gray-800 font-medium text-sm"
+                    >
+                      Mark as removed
+                    </button>
+                  )}
+                  <button
+                    onClick={() => handleDelete(item.id)}
+                    className="text-red-600 hover:text-red-700 font-medium text-sm"
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
 
               {/* Expanded Details */}
@@ -135,7 +218,15 @@ function HistoryPage() {
                           <span className="text-gray-700">
                             {day.date} · {timeOf(shift.clockIn)} - {timeOf(shift.clockOut)}
                           </span>
-                          {shift.status === SHIFT_STATUS.CREATED ? (
+                          {shift.status === SHIFT_STATUS.CREATED && shift.undo ? (
+                            shift.undo.status === UNDO_SHIFT_STATUS.DELETED ? (
+                              <span className="text-gray-600">deleted</span>
+                            ) : shift.undo.status === UNDO_SHIFT_STATUS.NOT_FOUND ? (
+                              <span className="text-yellow-700 text-right ml-2">not found (probably deleted already)</span>
+                            ) : (
+                              <span className="text-red-700 text-right ml-2">not deleted: {shift.undo.error}</span>
+                            )
+                          ) : shift.status === SHIFT_STATUS.CREATED ? (
                             <span className="text-green-700">created</span>
                           ) : shift.status === SHIFT_STATUS.SKIPPED ? (
                             <span className="text-gray-500 text-right ml-2">skipped: {shift.error}</span>

@@ -1,7 +1,7 @@
 ---
 spec: ../specs/undo-applied-week.md
 branch: 18-store-created-shift-ids-and-allow-undoing-an-applied-week
-status: in-progress
+status: done
 ---
 # Progress — Undo an applied week (#18)
 
@@ -47,6 +47,39 @@ Design:
   `8/8 shifts` and the 8 shifts listed as created; applying the same week again → overlap alert and no new
   History entry. The test shifts were deleted by hand in Factorial.
 
+## Plan — PR 2: undo a week
+
+- `src/lib/undo.js` (pure, tested): targets (created + safe integer id + not already deleted/not found),
+  classification of Factorial's answer, the "all not found" rule, outcome per shift, retry, user confirmation
+  ("Mark as removed") for a week already deleted by hand (raised by the user, 2026-11-09).
+- Content script `deleteShift`: minimal mutation with `$id: Int!`; returns `fatal` for HTTP errors, non-JSON
+  answers (login page) and GraphQL-level errors, which stop the undo and are never read as "not found".
+- Service worker `undoWeek` / `markUndoRemoved`: in-memory lock plus an in-progress marker in History (stale
+  after 10 min), one deletion at a time, result recorded in History; nothing deleted on a fatal stop → entry
+  restored and the user told why.
+- History: Undo week / Retry undo / Mark as removed, confirmation listing the shifts with their times and the
+  warning about later edits, per-shift undo result; no delete while an undo runs. Version 0.1.12.
+
+## Evidence — PR 2
+
+- `npm test` → 90 passed (undo.test.js: 31); build passes; content script still import-free.
+- Reviewer (refuter-correctness): no path deletes a shift the extension did not create. Fixed: ids beyond
+  `Number.MAX_SAFE_INTEGER` or non-digit ids could be rounded to another shift → only exact safe integers are
+  sent; concurrent undos of one entry → in-memory lock set before any await; logged-out answers without HTTP 401
+  (login page, GraphQL error) were not detected → `fatal` stops the undo and restores the entry if nothing was
+  deleted; deleting an entry during an undo lost its result → blocked, and the delete re-reads History;
+  "Mark as removed" offered during a running undo → hidden. Accepted: History writes from apply and undo can
+  race (last writer wins), the same as before.
+- Reviewer (refuter-tests, 40 mutants): 9 survived, including the CREATED-status safety rule. Added pinned tests;
+  re-run of 8 survivors on a scratch copy → each fails a test. Unreadable undo start times no longer block an
+  entry forever. Not automated (covered by the Chrome test): real deletion in Factorial, the manual shift that
+  must survive, logged out, cancel, popup closing, UI wording.
+- Real extension (2026-11-09, user, unpacked 0.1.12): applied an empty future week, added a shift by hand in the
+  same week and deleted one of the extension's shifts by hand. Cancel in the confirmation changed nothing. Undo
+  week deleted every remaining extension shift in Factorial (confirms `deleteAttendanceShift` with an `Int!` id
+  on existing shifts), the manual shift survived, History showed the hand-deleted shift as "not found", the
+  others as "deleted", and the entry as undone. Reported by the user as working perfectly.
+
 ## Decision queue
 
-- PR 2 (undo) waits for the response bodies of `DeleteAttendanceShift` (success and not found).
+- (resolved) The response bodies of `DeleteAttendanceShift` were captured on 2026-11-09; see the spec.
