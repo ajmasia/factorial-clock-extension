@@ -1,9 +1,12 @@
 import { useState, useEffect } from 'react'
+import { defaultIncludedDays, datesToApply } from '../../lib/existing-shifts.js'
 
 function GeneratePage() {
   const [loading, setLoading] = useState(false)
   const [applying, setApplying] = useState(false)
   const [schedule, setSchedule] = useState(null)
+  // Days to apply; days that already have shifts in Factorial start excluded (#19)
+  const [included, setIncluded] = useState({})
   const [selectedWeek, setSelectedWeek] = useState('')
 
   // Get current week in YYYY-Www format
@@ -107,6 +110,7 @@ function GeneratePage() {
 
       if (response.success) {
         setSchedule(response.data)
+        setIncluded(defaultIncludedDays(response.data.raw, response.data.existing))
       } else {
         alert(`Error: ${response.error}`)
       }
@@ -120,7 +124,12 @@ function GeneratePage() {
   const handleApply = async () => {
     if (!schedule) return
 
-    if (!confirm('Apply this schedule to Factorial?')) {
+    const includedDates = datesToApply(schedule.raw, included)
+    const excludedCount = schedule.raw.length - includedDates.length
+    const question = excludedCount > 0
+      ? `Apply this schedule to Factorial?\n\n${excludedCount} day(s) that already have shifts in Factorial will be skipped.`
+      : 'Apply this schedule to Factorial?'
+    if (!confirm(question)) {
       return
     }
 
@@ -130,7 +139,7 @@ function GeneratePage() {
       // Apply schedule
       const response = await chrome.runtime.sendMessage({
         action: 'applySchedule',
-        data: schedule
+        data: { ...schedule, includedDates }
       })
 
       if (response.success) {
@@ -227,11 +236,20 @@ function GeneratePage() {
             <span className="text-sm text-gray-500">Week of {schedule.weekStart}</span>
           </div>
 
+          {schedule.schedule.length > 0 && schedule.existing && !schedule.existing.checked && (
+            <div className="p-2 text-xs text-yellow-800 bg-yellow-50 rounded">
+              Existing shifts in Factorial could not be checked ({schedule.existing.reason}). Every day will be applied.
+            </div>
+          )}
+
           <div className="space-y-2">
-            {schedule.schedule.map((day) => (
+            {schedule.schedule.map((day) => {
+              const existingShifts = schedule.existing?.checked ? schedule.existing.byDate?.[day.date] || [] : []
+              const isIncluded = included[day.date] !== false
+              return (
               <div
                 key={day.date}
-                className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                className={`flex items-center justify-between p-3 rounded-lg ${isIncluded ? 'bg-gray-50' : 'bg-gray-100 opacity-70'}`}
               >
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
@@ -252,12 +270,28 @@ function GeneratePage() {
                       🍽️ Lunch: {day.raw.lunch_start.split('T')[1].substring(0, 5)} - {day.raw.lunch_end.split('T')[1].substring(0, 5)}
                     </div>
                   )}
+                  {existingShifts.length > 0 && (
+                    <div className="mt-1 text-xs text-yellow-800">
+                      {existingShifts.map((shift) => (
+                        <div key={shift.id}>Already in Factorial: {shift.clockIn || '?'} - {shift.clockOut || '?'}</div>
+                      ))}
+                      <label className="flex items-center gap-1 mt-1 text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={isIncluded}
+                          onChange={(e) => setIncluded({ ...included, [day.date]: e.target.checked })}
+                        />
+                        Apply this day anyway
+                      </label>
+                    </div>
+                  )}
                 </div>
                 <div className="text-sm font-medium text-primary-600">
                   {day.total}
                 </div>
               </div>
-            ))}
+              )
+            })}
           </div>
 
           <div className="pt-4 border-t border-gray-200">
@@ -279,12 +313,17 @@ function GeneratePage() {
             </button>
             <button
               onClick={handleApply}
-              disabled={applying}
+              disabled={applying || datesToApply(schedule.raw, included).length === 0}
               className="btn btn-primary flex-1"
             >
               {applying ? '⏳ Applying...' : '✓ Apply to Factorial'}
             </button>
           </div>
+          {datesToApply(schedule.raw, included).length === 0 && (
+            <p className="text-xs text-gray-600 text-center">
+              Every day of this week already has shifts in Factorial. Tick "Apply this day anyway" to apply a day.
+            </p>
+          )}
         </div>
       )}
     </div>

@@ -2,8 +2,10 @@
 import {
   generateWeeklySchedule,
   calculateTotalHours,
-  formatScheduleForDisplay
+  formatScheduleForDisplay,
+  getWeekDates
 } from '../lib/scheduler.js'
+import { groupShiftsByDate } from '../lib/existing-shifts.js'
 import { TIMING, STORAGE, ERROR_STRINGS, API } from '../lib/constants.js'
 import { planShifts, summarizeDays, buildHistoryEntry, SHIFT_STATUS } from '../lib/apply-results.js'
 import { loadHistory, saveHistory } from '../lib/history-storage.js'
@@ -102,16 +104,75 @@ async function handleGenerateSchedule(data) {
     // Format for display
     const formatted = formatScheduleForDisplay(schedule)
 
+    // Shifts already in Factorial for this week (#19); never blocks generation
+    const existing = schedule.length > 0
+      ? await checkExistingShifts(weekStart, config)
+      : { checked: false, reason: 'No work days in this week' }
+
     return {
       weekStart,
       schedule: formatted,
       raw: schedule,
-      totals
+      totals,
+      existing
     }
   } catch (error) {
     console.error('Generation failed:', error)
     throw error
   }
+}
+
+// Longest wait for the existing-shifts check when generating a week (#19)
+const EXISTING_SHIFTS_TIMEOUT_MS = 15000
+
+/**
+ * A Factorial tab that is already open and whose content script answers. Never creates or reloads
+ * a tab: the existing-shifts check is read-only and must not disturb the user's tabs (#19).
+ * @returns {Promise<object|null>}
+ */
+async function findReadyFactorialTab() {
+  const tabs = await chrome.tabs.query({ url: 'https://app.factorialhr.com/*' })
+  for (const tab of tabs) {
+    if (tab.status === 'complete' && await testContentScript(tab.id)) return tab
+  }
+  return null
+}
+
+/**
+ * Read the shifts Factorial already has for a week (#19). Read-only. Never throws: when the check
+ * cannot run it returns { checked: false, reason } and the week is generated as before.
+ * @returns {Promise<{checked: true, byDate: object} | {checked: false, reason: string}>}
+ */
+async function checkExistingShifts(weekStart, config) {
+  const check = (async () => {
+    let employeeId = config.employeeId
+    if (!employeeId || employeeId === 'auto') employeeId = await handleGetEmployeeId()
+    // Same reading as applying (parseInt), so both accept the same stored value
+    const numericId = parseInt(employeeId, 10)
+    if (!Number.isSafeInteger(numericId)) return { checked: false, reason: 'Employee ID is not set' }
+
+    const tab = await findReadyFactorialTab()
+    if (!tab) return { checked: false, reason: 'open Factorial in a tab to check existing shifts' }
+
+    const dates = getWeekDates(weekStart)
+    const response = await new Promise((resolve) => {
+      chrome.tabs.sendMessage(tab.id, {
+        action: 'readShifts',
+        data: { employeeId: String(numericId), startOn: dates[0], endOn: dates[dates.length - 1] }
+      }, (r) => resolve(chrome.runtime.lastError ? { success: false, error: chrome.runtime.lastError.message } : r))
+    })
+    if (!response || !response.success) {
+      return { checked: false, reason: (response && response.error) || 'No response from Factorial' }
+    }
+    return { checked: true, byDate: groupShiftsByDate(response.data) }
+  })()
+
+  const timeout = new Promise((resolve) =>
+    setTimeout(() => resolve({ checked: false, reason: 'Factorial did not answer in time' }), EXISTING_SHIFTS_TIMEOUT_MS))
+
+  const result = await Promise.race([check.catch((error) => ({ checked: false, reason: error.message })), timeout])
+  console.log('[existing shifts]', result.checked ? `checked: ${Object.keys(result.byDate).length} day(s) with shifts` : `not checked: ${result.reason}`)
+  return result
 }
 
 /**
@@ -305,6 +366,12 @@ async function handleApplySchedule(scheduleData) {
     // Authentication is checked by the Factorial API itself: the content script
     // sends the browser's cookies and maps an HTTP 401 to a "Not authenticated" error.
 
+    // Optional selection of days to apply (#19); undefined means every day
+    const includedDates = Array.isArray(scheduleData.includedDates) ? scheduleData.includedDates : null
+    if (includedDates && !scheduleData.raw.some(day => includedDates.includes(day.date))) {
+      throw new Error('No days selected to apply.')
+    }
+
     // Per-day, per-shift results (#18): every created shift keeps its Factorial identifier
     const days = []
 
@@ -323,6 +390,15 @@ async function handleApplySchedule(scheduleData) {
         const date = day.date
         const dayResult = { date, shifts: [] }
         days.push(dayResult)
+
+        // A day the user left out because it already has shifts in Factorial (#19)
+        if (includedDates && !includedDates.includes(date)) {
+          dayResult.shifts = planShifts(day).map(planned => ({
+            ...planned, id: null, status: SHIFT_STATUS.EXCLUDED, error: 'already has shifts in Factorial'
+          }))
+          continue
+        }
+
         let dayFailed = false
 
         for (const [index, planned] of planShifts(day).entries()) {
@@ -619,7 +695,6 @@ async function handleGetEmployeeId() {
     const text = await response.text()
     const result = text ? JSON.parse(text) : {}
 
-    console.log('[handleGetEmployeeId] Credentials response:', result)
 
     if (!result.data || !Array.isArray(result.data) || result.data.length === 0) {
       throw new Error('Invalid credentials response format')

@@ -4,7 +4,8 @@
 
 import { formatDateTimeWithTimezone } from './time-utils.js'
 
-export const SHIFT_STATUS = { CREATED: 'created', FAILED: 'failed', SKIPPED: 'skipped' }
+// EXCLUDED: a day the user left out because it already had shifts in Factorial (#19)
+export const SHIFT_STATUS = { CREATED: 'created', FAILED: 'failed', SKIPPED: 'skipped', EXCLUDED: 'excluded' }
 export const ENTRY_STATUS = { APPLIED: 'applied', PARTIAL: 'partial', FAILED: 'failed' }
 
 /**
@@ -23,23 +24,26 @@ export function planShifts(day) {
 }
 
 /**
- * Count created, failed and skipped shifts. A skipped shift was not attempted because an earlier
- * shift of the same day failed; it is not counted as failed.
+ * Count created, failed, skipped and excluded shifts. A skipped shift was not attempted because an
+ * earlier shift of the same day failed; an excluded one belongs to a day the user left out (#19).
+ * Neither counts as failed, and excluded shifts are not part of `total`.
  * @param {{shifts: object[]}[]} days
- * @returns {{created: number, failed: number, skipped: number, total: number}}
+ * @returns {{created: number, failed: number, skipped: number, excluded: number, total: number}}
  */
 export function summarizeDays(days) {
   let created = 0
   let failed = 0
   let skipped = 0
+  let excluded = 0
   for (const day of days) {
     for (const shift of day.shifts) {
       if (shift.status === SHIFT_STATUS.CREATED) created++
       else if (shift.status === SHIFT_STATUS.SKIPPED) skipped++
+      else if (shift.status === SHIFT_STATUS.EXCLUDED) excluded++
       else failed++
     }
   }
-  return { created, failed, skipped, total: created + failed + skipped }
+  return { created, failed, skipped, excluded, total: created + failed + skipped }
 }
 
 /**
