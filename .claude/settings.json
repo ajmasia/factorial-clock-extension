@@ -68,6 +68,33 @@
         "hooks": [
           {
             "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/rsc-bootstrap.mjs\" \"guard\" \"${CLAUDE_PROJECT_DIR}\" \"${CLAUDE_PROJECT_DIR}/.rsc/ship-guard.mjs\" \"${CLAUDE_PROJECT_DIR}\""
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/rsc-bootstrap.mjs\" \"guard\" \"${CLAUDE_PROJECT_DIR}\" \"${CLAUDE_PROJECT_DIR}/.rsc/branch-guard.mjs\" \"${CLAUDE_PROJECT_DIR}\""
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/rsc-bootstrap.mjs\" \"guard\" \"${CLAUDE_PROJECT_DIR}\" \"${CLAUDE_PROJECT_DIR}/.rsc/gitmoji-guard.mjs\" \"${CLAUDE_PROJECT_DIR}\""
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
             "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/rsc-bootstrap.mjs\" \"guard\" \"${CLAUDE_PROJECT_DIR}\" \"${CLAUDE_PROJECT_DIR}/.rsc/danger-guard.mjs\" \"${CLAUDE_PROJECT_DIR}\""
           }
         ]

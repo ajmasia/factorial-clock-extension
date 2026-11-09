@@ -76,3 +76,13 @@ CLAUDE.md
 .claude/commands/learn.md
 .claude/commands/resume-session.md
 .claude/commands/save-session.md
+.claude/agents/developer.md
+.claude/agents/finding-verifier.md
+.claude/agents/react-build-resolver.md
+.claude/agents/react-reviewer.md
+.claude/agents/refuter-correctness.md
+.claude/agents/refuter-security.md
+.claude/agents/refuter-tests.md
+.claude/commands/build-fix.md
+.claude/commands/react-build.md
+.claude/commands/react-review.md
