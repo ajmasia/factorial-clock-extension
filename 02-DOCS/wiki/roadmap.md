@@ -1,7 +1,7 @@
 # Roadmap — project audit (2026-11-09)
 
 Audit of v0.1.8 after fixing #2 (session cookie) and #4 (history quota). Every item has a GitHub issue:
-bugs are labelled `bug`, improvements `enhancement`. Updated 2026-11-09 after v0.1.11.
+bugs are labelled `bug`, improvements `enhancement`. Updated 2026-11-09 after v0.1.12.
 
 ## Done
 
@@ -14,17 +14,21 @@ bugs are labelled `bug`, improvements `enhancement`. Updated 2026-11-09 after v0
 | #11 | Opening Config overwrote the saved config with defaults | #33 | v0.1.9 |
 | #12 | Short split days generated invalid shifts; weekly total off when the last day is split | #34 | v0.1.10 |
 | #13 | Special week ranges only applied to their first week; the form hid the end date | #35 | v0.1.11 |
+| #18 | Store each created shift's identifier and result; undo an applied week from History | #37, #40 | v0.1.12 |
+| #38 | Overlap errors not recognised when Factorial answers in Spanish (found while testing #18) | #39 | v0.1.12 |
+| #8 | "Failed to apply" when only the history save rejected — resolved by #37: History is saved by the service worker and a failed save is only a warning | #37 | v0.1.12 |
+| — | Privacy policy for the Chrome Web Store listing (`PRIVACY.md`) | #41 | — |
 
-Chrome Web Store: v0.1.9 submitted for review on 2026-11-09 (published: v0.1.6). Upload v0.1.11 once it
-is approved.
+Chrome Web Store: v0.1.11 published; v0.1.12 submitted for review on 2026-11-09 with a rewritten listing
+(no "avoid patterns" framing, accurate privacy section, non-affiliation and accuracy clauses in the disclaimer)
+and the privacy policy URL.
 
 ## Open bugs
 
 | Issue | Bug | How it was found |
 | --- | --- | --- |
 | #7 | Exceptions exceed the `chrome.storage.sync` item quota (60–100 entries) | Same root cause as #4 |
-| #8 | "Failed to apply" shown when only the history save rejects | Review of #4 |
-| #9 | Unclear behaviour when applying while logged out | Review of #2 |
+| #9 | Unclear behaviour when applying while logged out (undo already handles it, see #18) | Review of #2 |
 | #10 | Applying hangs if the new Factorial tab never finishes loading | Code reading |
 | #27 | Week navigation shifts by a day in negative UTC offsets (`GeneratePage.jsx`) | Code reading, not reproduced |
 
@@ -43,17 +47,16 @@ permissions; avoid duplicating the install/test/build steps between `ci.yml` and
 ### Functionality
 | Issue | Improvement |
 | --- | --- |
-| #18 | Store the shift IDs returned by the API; "undo week" and per-day results in History |
-| #19 | Show the shifts already in Factorial before applying, and skip those days |
+| #19 | Show the shifts already in Factorial before applying, and skip those days (can reuse #18's identifiers; would also allow checking for edits before an undo) |
 | #20 | Edit a time by hand, or regenerate one day, before applying |
 | #21 | Import time off and holidays from Factorial as exceptions |
 
 ### UI
 | Issue | Improvement |
 | --- | --- |
-| #22 | Inline messages instead of the 20 `alert()`/`confirm()` calls, and per-day progress while applying |
-| #23 | Keep the apply result when the popup closes |
-| #24 | One UI language (`chrome.i18n`), config validation, unsaved-changes warning, bundled Inter font |
+| #22 | Inline messages instead of the `alert()`/`confirm()` calls, and per-day progress while applying |
+| #23 | Keep the apply result when the popup closes (History is now saved by the service worker; the alert still is not) |
+| #24 | One UI language (`chrome.i18n`), config validation, unsaved-changes warning, bundled Inter font (also removes the Google Fonts request from the privacy policy) |
 
 ### Data persistence
 | Issue | Improvement |
@@ -63,15 +66,15 @@ permissions; avoid duplicating the install/test/build steps between `ci.yml` and
 ### Factorial integration
 | Issue | Improvement |
 | --- | --- |
-| #26 | One adapter for the Factorial API: clear errors, remove the unused `getEmployeeId`, less logging, note the pinned credentials API version `2025-10-01` |
+| #26 | One adapter for the Factorial API: clear errors, remove the unused `getEmployeeId`, less logging, note the pinned credentials API version `2025-10-01`; add the overlap `code` to `OVERLAP_CODES` (#38) |
 
 ### Not tracked as an issue
 - Complete the rsc draft `02-DOCS/wiki/sdd/constitution.md` before the next ASDD feature.
 
 ## Recommended order
 
-1. #18 and #19: shift IDs, undo week, skip days already in Factorial.
+1. #19: show existing Factorial shifts before applying (ASDD; needs Factorial's read query, captured like #18's).
 2. #29 automatic upload to the Chrome Web Store, and #16 single version source.
-3. #8, #9 and #10: apply-flow robustness.
-4. #22 inline messages and #24 i18n.
+3. #9 and #10: apply-flow robustness.
+4. #22 inline messages and #24 i18n (with the bundled font).
 5. #25 storage layer and JSON backup (includes #7).

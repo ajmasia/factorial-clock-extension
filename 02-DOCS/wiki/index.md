@@ -1,6 +1,6 @@
 # Wiki
 
-- [Roadmap — project audit](roadmap.md): done, open bugs, improvements and recommended order (updated 2026-11-09).
+- [Roadmap — project audit](roadmap.md): done, open bugs, improvements and recommended order (updated 2026-11-09, v0.1.12).
 - Feature documents (`ftd/`):
   - [Fix: session cookie check](ftd/fix-session-cookie-check.md) — #2, released in 0.1.7.
   - [Fix: history storage quota](ftd/fix-history-storage-quota.md) — #4, released in 0.1.8.
@@ -9,6 +9,10 @@
   - [Fix: opening Config overwrites the saved configuration](ftd/fix-config-overwrite.md) — #11, released in 0.1.9.
   - [Fix: short days with split shifts](ftd/fix-short-split-days.md) — #12, released in 0.1.10.
   - [Fix: special week ranges](ftd/fix-special-week-ranges.md) — #13, released in 0.1.11.
+  - [Fix: overlap errors in any language](ftd/fix-overlap-language.md) — #38, released in 0.1.12.
 - Harness (`harness/`): [decisions](harness/decisions.md), [installation plan](harness/installation-plan.md).
 - SDD (`sdd/`): [constitution](sdd/constitution.md) (draft), [decisions](sdd/decisions.md).
-  - Specs (`sdd/specs/`): [CI on pull requests](sdd/specs/ci-on-pull-requests.md) — #15, implemented.
+  - Specs (`sdd/specs/`): [CI on pull requests](sdd/specs/ci-on-pull-requests.md) — #15, implemented;
+    [Undo an applied week](sdd/specs/undo-applied-week.md) — #18, released in 0.1.12.
+  - Progress (`sdd/progress/`): [Undo an applied week](sdd/progress/undo-applied-week.md).
+- Privacy policy: [`PRIVACY.md`](../../PRIVACY.md) (repository root).

@@ -7,12 +7,12 @@ timestamp: 2026-11-09T11:00:00Z
 topic: sdd
 slug: undo-applied-week
 issue: 18
-status: draft
+status: planned
 ---
 
 # Spec — Undo an applied week
 
-> Slug: `undo-applied-week` · Status: draft · Created: 2026-11-09 · Issue: #18
+> Slug: `undo-applied-week` · Status: implemented in PRs #37 and #40, released in v0.1.12 · Created: 2026-11-09 · Issue: #18
 > Inherits: [constitution](../constitution.md) — still a draft, so no principles are inherited (see Points to clarify).
 > Scope decisions 1–4 and 6 were delegated by the user to the agent («Decide tú», 2026-11-09) and are recorded as
 > *suposición tomada* below. Approved by the user on 2026-11-09 after reading the revised spec: «si» (to «¿apruebas la
