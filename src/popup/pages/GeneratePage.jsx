@@ -134,21 +134,10 @@ function GeneratePage() {
       })
 
       if (response.success) {
-        // Save to history
-        console.log('Saving to history...', schedule)
-        const historyResponse = await chrome.runtime.sendMessage({
-          action: 'saveToHistory',
-          data: schedule
-        })
-        console.log('History save response:', historyResponse)
-
-        let historyWarning = ''
-        if (historyResponse.success) {
-          console.log('Saved to history successfully')
-        } else {
-          console.error('Failed to save to history:', historyResponse.error)
-          historyWarning = `\n\nWarning: the schedule could not be saved to History (${historyResponse.error || 'unknown error'}).`
-        }
+        // The service worker records the week in History, shift by shift (#18)
+        const historyWarning = response.data.historySaved !== false
+          ? ''
+          : `\n\nWarning: the schedule could not be saved to History (${response.data.historyError || 'unknown error'}).`
 
         alert(`Schedule applied successfully! ${response.data.shiftsCreated} shifts created.${historyWarning}`)
       } else {

@@ -5,7 +5,7 @@ import {
   formatScheduleForDisplay
 } from '../lib/scheduler.js'
 import { TIMING, STORAGE, ERROR_STRINGS, API } from '../lib/constants.js'
-import { formatDateTimeWithTimezone } from '../lib/time-utils.js'
+import { planShifts, summarizeDays, buildHistoryEntry, SHIFT_STATUS } from '../lib/apply-results.js'
 import { loadHistory, saveHistory } from '../lib/history-storage.js'
 import { DEFAULT_CONFIG } from '../lib/config-storage.js'
 
@@ -41,12 +41,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     case 'applySchedule':
       handleApplySchedule(request.data)
-        .then(result => sendResponse({ success: true, data: result }))
-        .catch(error => sendResponse({ success: false, error: error.message }))
-      return true
-
-    case 'saveToHistory':
-      handleSaveToHistory(request.data)
         .then(result => sendResponse({ success: true, data: result }))
         .catch(error => sendResponse({ success: false, error: error.message }))
       return true
@@ -257,6 +251,7 @@ async function handleApplySchedule(scheduleData) {
 
   let tab = null
   let wasCreated = false
+  let historyResult = null
 
   try {
     // Get configuration
@@ -288,8 +283,8 @@ async function handleApplySchedule(scheduleData) {
     // Authentication is checked by the Factorial API itself: the content script
     // sends the browser's cookies and maps an HTTP 401 to a "Not authenticated" error.
 
-    let shiftsCreated = 0
-    const errors = []
+    // Per-day, per-shift results (#18): every created shift keeps its Factorial identifier
+    const days = []
 
     console.log(`Processing ${scheduleData.raw.length} days...`)
 
@@ -299,89 +294,78 @@ async function handleApplySchedule(scheduleData) {
     wasCreated = result.wasCreated
     console.log(`Using Factorial tab ${tab.id}`)
 
-    // Process each day in the schedule
-    for (const day of scheduleData.raw) {
-      const date = day.date
+    let authError = null
 
-      try {
-        if (day.type === 'split') {
-          // Split shift: create two separate shifts (checkin->lunch_start, lunch_end->checkout)
-          console.log(`Creating split shift for ${date}...`)
+    try {
+      for (const day of scheduleData.raw) {
+        const date = day.date
+        const dayResult = { date, shifts: [] }
+        days.push(dayResult)
+        let dayFailed = false
 
-          // Convert datetime strings to ISO format with timezone
-          const checkin = formatDateTimeWithTimezone(day.checkin)
-          const lunchStart = formatDateTimeWithTimezone(day.lunch_start)
-          const lunchEnd = formatDateTimeWithTimezone(day.lunch_end)
-          const checkout = formatDateTimeWithTimezone(day.checkout)
+        for (const [index, planned] of planShifts(day).entries()) {
+          if (dayFailed) {
+            // Same as before #18: once a shift of the day fails, the rest of the day is not created
+            dayResult.shifts.push({ ...planned, id: null, status: SHIFT_STATUS.SKIPPED, error: 'an earlier shift of the day failed' })
+            continue
+          }
+          if (index > 0) {
+            await new Promise(resolve => setTimeout(resolve, TIMING.SHIFT_APPLICATION_DELAY))
+          }
 
-          console.log(`  Shift 1: ${checkin} -> ${lunchStart}`)
-          const shift1 = await createShift(tab.id, employeeId, checkin, lunchStart, date)
-          console.log(`  Shift 1 created with ID: ${shift1.id}`)
-          shiftsCreated++
+          try {
+            const shift = await createShift(tab.id, employeeId, planned.clockIn, planned.clockOut, date)
+            // Without an identifier the shift cannot be undone later; it is still recorded as created
+            const id = shift && shift.id != null ? String(shift.id) : null
+            dayResult.shifts.push({ ...planned, id, status: SHIFT_STATUS.CREATED })
+            console.log(`  ${date} shift ${index + 1} created: ${shift.id}`)
+          } catch (error) {
+            const errorMsg = error.message
+            dayResult.shifts.push({ ...planned, id: null, status: SHIFT_STATUS.FAILED, error: errorMsg })
+            dayFailed = true
 
-          // Small delay between shifts
-          await new Promise(resolve => setTimeout(resolve, TIMING.SHIFT_APPLICATION_DELAY))
-
-          console.log(`  Shift 2: ${lunchEnd} -> ${checkout}`)
-          const shift2 = await createShift(tab.id, employeeId, lunchEnd, checkout, date)
-          console.log(`  Shift 2 created with ID: ${shift2.id}`)
-          shiftsCreated++
-
-        } else {
-          // Continuous shift: create one shift (checkin->checkout)
-          console.log(`Creating continuous shift for ${date}...`)
-
-          const checkin = formatDateTimeWithTimezone(day.checkin)
-          const checkout = formatDateTimeWithTimezone(day.checkout)
-
-          console.log(`  Times: ${checkin} -> ${checkout}`)
-          console.log(`  Employee ID: ${employeeId}, Date: ${date}`)
-
-          const shift = await createShift(tab.id, employeeId, checkin, checkout, date)
-          console.log(`  Shift created successfully with ID: ${shift.id}`)
-          shiftsCreated++
+            if (errorMsg.includes(ERROR_STRINGS.NOT_AUTHENTICATED)) {
+              console.error('❌ Authentication error - stopping process')
+              authError = error
+              break
+            }
+            if (!errorMsg.includes(ERROR_STRINGS.SHIFT_OVERLAP)) {
+              console.error(`✗ Failed to create shift for ${date}:`, errorMsg)
+            }
+          }
         }
 
-        console.log(`✓ Day ${date} completed. Total shifts created: ${shiftsCreated}`)
+        if (authError) break
 
         // Small delay between days
         await new Promise(resolve => setTimeout(resolve, TIMING.DAY_APPLICATION_DELAY))
-
-      } catch (error) {
-        const errorMsg = error.message
-        const isOverlapError = errorMsg.includes(ERROR_STRINGS.SHIFT_OVERLAP)
-        const isAuthError = errorMsg.includes(ERROR_STRINGS.NOT_AUTHENTICATED)
-
-        // If authentication error, stop processing immediately
-        if (isAuthError) {
-          console.error('❌ Authentication error - stopping process')
-          throw error
-        }
-
-        // Only log non-overlap errors
-        if (!isOverlapError) {
-          console.error(`✗ Failed to create shift for ${date}:`, error)
-          console.error(`  Error details:`, errorMsg)
-        }
-
-        errors.push({ date, error: errorMsg })
+      }
+    } finally {
+      // Record the week whenever a shift was created, even if the loop stopped early, so created shifts
+      // keep their identifiers (#18). A week where nothing was created is not recorded: the apply error
+      // already tells the user, and retries do not push real entries out of the 50-entry limit.
+      if (summarizeDays(days).created > 0) {
+        historyResult = await recordHistoryEntry(scheduleData, days)
       }
     }
 
-    console.log(`Finished processing. Shifts created: ${shiftsCreated}, Errors: ${errors.length}`)
+    if (authError) throw authError
 
-    if (errors.length > 0) {
-      console.warn('Some shifts failed:', errors)
+    const { created: shiftsCreated, failed } = summarizeDays(days)
+    console.log(`Finished processing. Shifts created: ${shiftsCreated}, failed: ${failed}`)
 
-      // Check if errors are due to overlapping shifts
-      const hasOverlapErrors = errors.some(e => e.error.includes(ERROR_STRINGS.SHIFT_OVERLAP))
+    if (failed > 0) {
+      const failures = days.flatMap(d => d.shifts.filter(s => s.status === SHIFT_STATUS.FAILED))
+      console.warn('Some shifts failed:', failures)
+
+      const hasOverlapErrors = failures.some(f => f.error.includes(ERROR_STRINGS.SHIFT_OVERLAP))
 
       if (hasOverlapErrors && shiftsCreated === 0) {
         throw new Error(`Cannot create shifts: All dates already have existing shifts in Factorial. Please review and delete existing shifts for these dates in Factorial before applying a new schedule.`)
       } else if (hasOverlapErrors) {
-        throw new Error(`${shiftsCreated} shifts created, ${errors.length} failed. Some dates already have existing shifts in Factorial. Please review and delete conflicting shifts before retrying.`)
+        throw new Error(`${shiftsCreated} shifts created, ${failed} failed. Some dates already have existing shifts in Factorial. Please review and delete conflicting shifts before retrying.`)
       } else {
-        throw new Error(`${shiftsCreated} shifts created, ${errors.length} failed. First error: ${errors[0].error}`)
+        throw new Error(`${shiftsCreated} shifts created, ${failed} failed. First error: ${failures[0].error}`)
       }
     }
 
@@ -398,7 +382,10 @@ async function handleApplySchedule(scheduleData) {
     return {
       success: true,
       shiftsCreated,
-      appliedAt: new Date().toISOString()
+      appliedAt: new Date().toISOString(),
+      // null when nothing had to be recorded
+      historySaved: historyResult ? historyResult.saved : null,
+      historyError: historyResult ? historyResult.error : null
     }
   } catch (error) {
     console.error('Apply failed:', error)
@@ -411,42 +398,27 @@ async function handleApplySchedule(scheduleData) {
       })
     }
 
+    if (historyResult && !historyResult.saved) {
+      error.message += ` (History could not be saved: ${historyResult.error})`
+    }
     throw error
   }
 }
 
 /**
- * Save schedule to history
+ * Add an applied week to History (#18). Never throws: a failed save is reported to the caller,
+ * so it cannot turn a successful apply into an error (see #8).
+ * @returns {Promise<{saved: boolean, error: string|null}>}
  */
-async function handleSaveToHistory(scheduleData) {
-  console.log('[handleSaveToHistory] Called with:', scheduleData)
+async function recordHistoryEntry(scheduleData, days) {
   try {
     const history = await loadHistory()
-    console.log('[handleSaveToHistory] Current history length:', history.length)
-
-    const historyEntry = {
-      id: Date.now(),
-      weekStart: scheduleData.weekStart,
-      schedule: scheduleData.schedule,
-      raw: scheduleData.raw,
-      totals: scheduleData.totals,
-      appliedAt: new Date().toISOString(),
-      status: 'applied'
-    }
-
-    history.unshift(historyEntry) // Add to beginning
-    console.log('[handleSaveToHistory] Added entry, new length:', history.length)
-
-    // Keep only last N entries
-    const trimmedHistory = history.slice(0, STORAGE.MAX_HISTORY_ENTRIES)
-
-    await saveHistory(trimmedHistory)
-    console.log('[handleSaveToHistory] Saved to storage successfully')
-
-    return historyEntry
+    history.unshift(buildHistoryEntry(scheduleData, days))
+    await saveHistory(history.slice(0, STORAGE.MAX_HISTORY_ENTRIES))
+    return { saved: true, error: null }
   } catch (error) {
-    console.error('[handleSaveToHistory] Save to history failed:', error)
-    throw error
+    console.error('[recordHistoryEntry] Save to history failed:', error)
+    return { saved: false, error: error.message || 'unknown error' }
   }
 }
 
