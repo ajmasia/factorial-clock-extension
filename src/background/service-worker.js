@@ -8,6 +8,7 @@ import { TIMING, STORAGE, ERROR_STRINGS, API } from '../lib/constants.js'
 import { planShifts, summarizeDays, buildHistoryEntry, SHIFT_STATUS } from '../lib/apply-results.js'
 import { loadHistory, saveHistory } from '../lib/history-storage.js'
 import { DEFAULT_CONFIG } from '../lib/config-storage.js'
+import { isOverlapError } from '../lib/factorial-errors.js'
 
 console.log('Factorial Clock: Background service worker loaded')
 
@@ -232,11 +233,10 @@ async function createShift(tabId, employeeId, clockIn, clockOut, date) {
           console.log('[createShift] Success:', response.data)
           resolve(response.data)
         } else {
-          // Only log detailed errors if it's not an overlap error
-          if (!response.error.includes(ERROR_STRINGS.SHIFT_OVERLAP)) {
-            console.error('[createShift] Error:', response.error)
-          }
-          reject(new Error(response.error || 'Unknown error'))
+          const error = new Error(response.error || 'Unknown error')
+          error.code = response.errorCode || null
+          error.type = response.errorType || null
+          reject(error)
         }
       }
     )
@@ -321,7 +321,7 @@ async function handleApplySchedule(scheduleData) {
             console.log(`  ${date} shift ${index + 1} created: ${shift.id}`)
           } catch (error) {
             const errorMsg = error.message
-            dayResult.shifts.push({ ...planned, id: null, status: SHIFT_STATUS.FAILED, error: errorMsg })
+            dayResult.shifts.push({ ...planned, id: null, status: SHIFT_STATUS.FAILED, error: errorMsg, errorCode: error.code || null })
             dayFailed = true
 
             if (errorMsg.includes(ERROR_STRINGS.NOT_AUTHENTICATED)) {
@@ -329,8 +329,10 @@ async function handleApplySchedule(scheduleData) {
               authError = error
               break
             }
-            if (!errorMsg.includes(ERROR_STRINGS.SHIFT_OVERLAP)) {
-              console.error(`✗ Failed to create shift for ${date}:`, errorMsg)
+            if (isOverlapError(error)) {
+              console.log(`  ${date}: overlaps an existing shift`)
+            } else {
+              console.error(`✗ Failed to create shift for ${date}:`, errorMsg, error.code ? `(code ${error.code})` : '')
             }
           }
         }
@@ -356,14 +358,23 @@ async function handleApplySchedule(scheduleData) {
 
     if (failed > 0) {
       const failures = days.flatMap(d => d.shifts.filter(s => s.status === SHIFT_STATUS.FAILED))
-      console.warn('Some shifts failed:', failures)
+      const hasOverlapErrors = failures.some(f => isOverlapError({ message: f.error, code: f.errorCode }))
 
-      const hasOverlapErrors = failures.some(f => f.error.includes(ERROR_STRINGS.SHIFT_OVERLAP))
-
+      // Overlaps are an expected outcome, not an extension error: not logged as errors or warnings (#38)
+      const onlyOverlaps = failures.every(f => isOverlapError({ message: f.error, code: f.errorCode }))
+      if (onlyOverlaps) {
+        console.log('Some shifts overlap existing ones:', failures.length)
+      } else {
+        console.warn('Some shifts failed:', failures)
+      }
       if (hasOverlapErrors && shiftsCreated === 0) {
-        throw new Error(`Cannot create shifts: All dates already have existing shifts in Factorial. Please review and delete existing shifts for these dates in Factorial before applying a new schedule.`)
+        const error = new Error(`Cannot create shifts: All dates already have existing shifts in Factorial. Please review and delete existing shifts for these dates in Factorial before applying a new schedule.`)
+        error.expected = onlyOverlaps
+        throw error
       } else if (hasOverlapErrors) {
-        throw new Error(`${shiftsCreated} shifts created, ${failed} failed. Some dates already have existing shifts in Factorial. Please review and delete conflicting shifts before retrying.`)
+        const error = new Error(`${shiftsCreated} shifts created, ${failed} failed. Some dates already have existing shifts in Factorial. Please review and delete conflicting shifts before retrying.`)
+        error.expected = onlyOverlaps
+        throw error
       } else {
         throw new Error(`${shiftsCreated} shifts created, ${failed} failed. First error: ${failures[0].error}`)
       }
@@ -388,7 +399,11 @@ async function handleApplySchedule(scheduleData) {
       historyError: historyResult ? historyResult.error : null
     }
   } catch (error) {
-    console.error('Apply failed:', error)
+    if (error.expected) {
+      console.log('Apply stopped:', error.message)
+    } else {
+      console.error('Apply failed:', error)
+    }
 
     // Close the tab if we created it, even on error
     if (wasCreated && tab) {

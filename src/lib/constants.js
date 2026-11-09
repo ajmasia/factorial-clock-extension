@@ -17,7 +17,6 @@ export const STORAGE = {
 
 // Error message strings
 export const ERROR_STRINGS = {
-  SHIFT_OVERLAP: 'overlaps with shift',
   NOT_AUTHENTICATED: 'Not authenticated',
 }
 

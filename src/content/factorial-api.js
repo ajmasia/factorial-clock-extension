@@ -33,11 +33,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         sendResponse({ success: true, data: shift })
       })
       .catch(error => {
-        // Only log detailed errors if it's not an overlap error
-        if (!error.message.includes('overlaps with shift')) {
-          console.error('[Factorial API] Error creating shift:', error)
-        }
-        sendResponse({ success: false, error: error.message })
+        // Classified by the service worker (#38); a rejection by Factorial is not an extension error
+        console.log('[Factorial API] Shift not created:', error.message)
+        sendResponse({ success: false, error: error.message, errorCode: error.code || null, errorType: error.type || null })
       })
     return true
   }
@@ -107,6 +105,7 @@ mutation CreateAttendanceShift($clockIn: ISO8601DateTime, $clockOut: ISO8601Date
         ... on SimpleError {
           message
           type
+          code
           __typename
         }
         ... on StructuredError {
@@ -188,13 +187,11 @@ mutation CreateAttendanceShift($clockIn: ISO8601DateTime, $clockOut: ISO8601Date
   const errors = result?.data?.attendanceMutations?.createAttendanceShift?.errors || []
   if (errors.length > 0) {
     const errorMsg = errors[0].messages?.[0] || errors[0].message || 'Unknown error'
-
-    // Only log detailed errors if it's not an overlap error
-    if (!errorMsg.includes('overlaps with shift')) {
-      console.error('[Factorial API] GraphQL errors:', errors)
-    }
-
-    throw new Error(errorMsg)
+    // Keep Factorial's language-independent fields for the service worker (#38)
+    const error = new Error(errorMsg)
+    error.code = errors[0].code || null
+    error.type = errors[0].type || null
+    throw error
   }
 
   const shift = result?.data?.attendanceMutations?.createAttendanceShift?.shift
