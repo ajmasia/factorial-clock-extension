@@ -1,7 +1,7 @@
 ---
 author: Antonio Masiá
 branch: 38-overlap-errors-are-not-recognised-when-factorial-answers-in-spanish
-status: in-progress
+status: done
 ---
 # Fix: overlap errors not recognised in Spanish (#38)
 
@@ -35,7 +35,7 @@ Out:
 - [x] Content script still has no imports — proof: `dist/factorial-api.js` contains no `import`.
 - [x] Real extension — proof: user re-applies an applied week with a Spanish account: overlap alert shown, no
       overlap entries in chrome://extensions → Errors.
-- [ ] Build and CI.
+- [x] Build and CI.
 
 ## Evidence
 
@@ -57,4 +57,5 @@ Out:
 - Pending: the value of `code` for an overlap (to make detection language-independent).
 ## Next
 
-PR and CI. Then add the overlap `code` to `OVERLAP_CODES` once a create response is captured.
+Merged in PR #39, released in v0.1.12 (2026-11-09). Add the overlap `code` to `OVERLAP_CODES` once a
+create response with an overlap is captured.
