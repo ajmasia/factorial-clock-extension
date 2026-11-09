@@ -1,7 +1,7 @@
 ---
 author: Antonio Masiá
 branch: 14-add-unit-tests-for-the-schedule-generator
-status: in-progress
+status: done
 ---
 # Unit tests for the schedule generator (#14)
 
@@ -51,4 +51,4 @@ Out:
 
 ## Next
 
-Open the PR; after merge, #15 runs these tests on every pull request.
+Merged in PR #30 (2026-11-09).

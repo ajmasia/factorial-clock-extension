@@ -1,7 +1,7 @@
 ---
 author: Antonio Masiá
 branch: 13-special-week-ranges-only-apply-to-the-week-of-their-start-date
-status: in-progress
+status: done
 ---
 # Fix: special week ranges only apply to the week of their start date (#13)
 
@@ -35,7 +35,7 @@ Out:
 - [x] #13 test passes without `.fails` — proof: `npm test`.
 - [x] Every overlapped week uses the special week; others do not — proof: range tests.
 - [x] Tie-break between overlapping special weeks — proof: test.
-- [ ] Full suite, build, CI — proof: `npm test`, `npm run build`, PR check.
+- [x] Full suite, build, CI — proof: `npm test`, `npm run build`, PR check.
 
 ## Evidence
 
@@ -53,4 +53,4 @@ Out:
 
 ## Next
 
-Commit with `Fixes #13`, bump to 0.1.11, PR and CI.
+Merged in PR #35, released in v0.1.11 (2026-11-09).
