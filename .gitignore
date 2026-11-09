@@ -34,3 +34,45 @@ CLAUDE.md
 # package-lock.json
 # yarn.lock
 # pnpm-lock.yaml
+
+# rsc local state (hooks, seals, logs) and managed skill links — machine-local
+.rsc/
+.worktrees/
+.claude/skills/analyze
+.claude/skills/asdd
+.claude/skills/automation-strategy
+.claude/skills/clarify
+.claude/skills/connect-tool
+.claude/skills/constitution
+.claude/skills/debug
+.claude/skills/decision-challenge
+.claude/skills/deprecation
+.claude/skills/design
+.claude/skills/fable-operator
+.claude/skills/ftd
+.claude/skills/harness
+.claude/skills/idea-refinement
+.claude/skills/implement
+.claude/skills/init
+.claude/skills/orient
+.claude/skills/parallel
+.claude/skills/plan
+.claude/skills/react
+.claude/skills/review
+.claude/skills/sdd-init
+.claude/skills/ship
+.claude/skills/simplify-code
+.claude/skills/source-grounded-development
+.claude/skills/specify
+.claude/skills/suggest
+.claude/skills/tasks
+.claude/skills/tidy
+.claude/skills/unslop
+.claude/skills/ux
+.claude/skills/verify
+.claude/skills/worktrees
+.claude/skills/.rsc-state.json
+.claude/commands/checkpoint.md
+.claude/commands/learn.md
+.claude/commands/resume-session.md
+.claude/commands/save-session.md

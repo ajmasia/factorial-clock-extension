@@ -1,0 +1,94 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/rsc-bootstrap.mjs\" \"announce\" \"${CLAUDE_PROJECT_DIR}\" \"${CLAUDE_PROJECT_DIR}/.rsc/session-start.mjs\" \"${CLAUDE_PROJECT_DIR}/.claude/skills/suggest/SKILL.md\" \"${CLAUDE_PROJECT_DIR}\""
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/rsc-bootstrap.mjs\" \"quiet\" \"${CLAUDE_PROJECT_DIR}\" \"${CLAUDE_PROJECT_DIR}/.rsc/worklog-checkpoint.mjs\" \"${CLAUDE_PROJECT_DIR}\""
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/rsc-bootstrap.mjs\" \"quiet\" \"${CLAUDE_PROJECT_DIR}\" \"${CLAUDE_PROJECT_DIR}/.rsc/worklog-checkpoint.mjs\" \"${CLAUDE_PROJECT_DIR}\""
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/rsc-bootstrap.mjs\" \"quiet\" \"${CLAUDE_PROJECT_DIR}\" \"${CLAUDE_PROJECT_DIR}/.rsc/userprompt-gate.mjs\" \"${CLAUDE_PROJECT_DIR}\""
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/rsc-bootstrap.mjs\" \"quiet\" \"${CLAUDE_PROJECT_DIR}\" \"${CLAUDE_PROJECT_DIR}/.rsc/ftd-nudge.mjs\" \"${CLAUDE_PROJECT_DIR}\""
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/rsc-bootstrap.mjs\" \"quiet\" \"${CLAUDE_PROJECT_DIR}\" \"${CLAUDE_PROJECT_DIR}/.rsc/copy-guard.mjs\" \"${CLAUDE_PROJECT_DIR}\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/rsc-bootstrap.mjs\" \"guard\" \"${CLAUDE_PROJECT_DIR}\" \"${CLAUDE_PROJECT_DIR}/.rsc/danger-guard.mjs\" \"${CLAUDE_PROJECT_DIR}\""
+          }
+        ]
+      }
+    ]
+  },
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
+  "permissions": {
+    "allow": [
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(gh pr create *)"
+    ],
+    "ask": [
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(git push * --force*)",
+      "Bash(git push * -f*)"
+    ]
+  }
+}
