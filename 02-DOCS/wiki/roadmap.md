@@ -25,6 +25,7 @@ bugs are labelled `bug`, improvements `enhancement`.
 | #15 | CI on pull requests: build and tests (the release workflow only runs on tags) |
 | #16 | One source for the version (now in 5 files) |
 | #17 | Repo cleanup: committed `factorial-clock-v0.1.3.zip`, links to missing `CHANGELOG.md` and `CHROME_WEB_STORE_DESCRIPTION.md`, reference to the gitignored `CLAUDE.md` |
+| #29 | Upload releases to the Chrome Web Store from the release workflow (Chrome Web Store API; secrets set by the owner) |
 
 ### Functionality
 | Issue | Improvement |
@@ -57,7 +58,7 @@ bugs are labelled `bug`, improvements `enhancement`.
 ## Recommended order
 
 1. #14 scheduler tests, then #11, #12 and #13.
-2. #15 CI on pull requests.
+2. #15 CI on pull requests, and #29 automatic upload to the Chrome Web Store.
 3. #18 and #19: shift IDs, undo week, skip days already in Factorial.
 4. #22 inline messages and #24 i18n.
 5. #25 storage layer and JSON backup (includes #7).
