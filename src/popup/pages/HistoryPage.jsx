@@ -1,5 +1,15 @@
 import { useState, useEffect } from 'react'
 import { loadHistory as loadStoredHistory, saveHistory } from '../../lib/history-storage.js'
+import { summarizeDays, SHIFT_STATUS } from '../../lib/apply-results.js'
+
+const STATUS_BADGE = {
+  applied: 'bg-green-100 text-green-700',
+  partial: 'bg-yellow-100 text-yellow-800',
+  failed: 'bg-red-100 text-red-700',
+}
+
+// "2026-11-09T07:12:00+01:00" → "07:12"
+const timeOf = (isoDateTime) => isoDateTime.slice(11, 16)
 
 function HistoryPage() {
   const [history, setHistory] = useState([])
@@ -66,12 +76,16 @@ function HistoryPage() {
                     <h3 className="font-semibold text-gray-900">
                       Week of {item.weekStart}
                     </h3>
-                    <span className="px-2 py-0.5 text-xs font-medium bg-green-100 text-green-700 rounded">
+                    <span className={`px-2 py-0.5 text-xs font-medium rounded ${STATUS_BADGE[item.status] || STATUS_BADGE.applied}`}>
                       {item.status}
                     </span>
                   </div>
                   <div className="flex items-center gap-4 mt-2 text-sm text-gray-600">
                     <span>📅 {item.schedule?.length || 0} days</span>
+                    {item.days && (() => {
+                      const { created, total } = summarizeDays(item.days)
+                      return <span>✅ {created}/{total} shifts</span>
+                    })()}
                     <span>⏱️ {item.totals?.formatted || '0h 0m'}</span>
                     <span>🕐 {formatDateTime(item.appliedAt)}</span>
                   </div>
@@ -112,6 +126,26 @@ function HistoryPage() {
                       </div>
                     ))}
                   </div>
+                  {/* Per-shift results, stored since #18 (older entries have none) */}
+                  {item.days && (
+                    <div className="mt-3 space-y-1">
+                      <div className="text-xs font-semibold text-gray-700">Shifts in Factorial</div>
+                      {item.days.map((day) => day.shifts.map((shift, index) => (
+                        <div key={`${day.date}-${index}`} className="flex items-start justify-between text-xs">
+                          <span className="text-gray-700">
+                            {day.date} · {timeOf(shift.clockIn)} - {timeOf(shift.clockOut)}
+                          </span>
+                          {shift.status === SHIFT_STATUS.CREATED ? (
+                            <span className="text-green-700">created</span>
+                          ) : shift.status === SHIFT_STATUS.SKIPPED ? (
+                            <span className="text-gray-500 text-right ml-2">skipped: {shift.error}</span>
+                          ) : (
+                            <span className="text-red-700 text-right ml-2">failed: {shift.error}</span>
+                          )}
+                        </div>
+                      )))}
+                    </div>
+                  )}
                   <div className="mt-3 pt-3 border-t border-gray-200 flex justify-between items-center">
                     <span className="font-semibold text-gray-900">Weekly Total</span>
                     <span className="text-lg font-bold text-primary-600">
