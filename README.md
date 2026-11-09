@@ -178,6 +178,10 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guid
 
 This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
 
+## Privacy
+
+The extension sends data only to Factorial and stores everything in your browser. See the [Privacy Policy](PRIVACY.md).
+
 ## Disclaimer
 
 This extension is not officially affiliated with or endorsed by Factorial. It's an independent tool created to automate time tracking workflows. Use at your own discretion and ensure compliance with your company's time tracking policies.
