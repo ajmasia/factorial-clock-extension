@@ -4,8 +4,7 @@
   "version": "0.1.6",
   "description": "Generate and manage weekly schedules for Factorial time tracking",
   "permissions": [
-    "storage",
-    "cookies"
+    "storage"
   ],
   "host_permissions": [
     "https://app.factorialhr.com/*",
