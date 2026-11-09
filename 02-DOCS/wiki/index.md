@@ -6,3 +6,4 @@
   - [Fix: history storage quota](ftd/fix-history-storage-quota.md) — #4, released in 0.1.8.
 - Harness (`harness/`): [decisions](harness/decisions.md), [installation plan](harness/installation-plan.md).
 - SDD (`sdd/`): [constitution](sdd/constitution.md) (draft).
+  - Specs (`sdd/specs/`): [CI on pull requests](sdd/specs/ci-on-pull-requests.md) — #15.
