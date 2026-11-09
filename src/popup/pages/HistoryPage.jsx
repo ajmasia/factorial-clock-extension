@@ -228,6 +228,8 @@ function HistoryPage() {
                             )
                           ) : shift.status === SHIFT_STATUS.CREATED ? (
                             <span className="text-green-700">created</span>
+                          ) : shift.status === SHIFT_STATUS.EXCLUDED ? (
+                            <span className="text-gray-500 text-right ml-2">skipped: already in Factorial</span>
                           ) : shift.status === SHIFT_STATUS.SKIPPED ? (
                             <span className="text-gray-500 text-right ml-2">skipped: {shift.error}</span>
                           ) : (

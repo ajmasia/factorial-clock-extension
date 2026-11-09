@@ -25,6 +25,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true // Keep channel open for async response
   }
 
+  if (request.action === 'readShifts') {
+    readShifts(request.data)
+      .then(result => sendResponse(result))
+      .catch(error => sendResponse({ success: false, error: error.message }))
+    return true
+  }
+
   if (request.action === 'deleteShift') {
     deleteShift(request.data)
       .then(result => sendResponse(result))
@@ -290,4 +297,56 @@ async function deleteShift({ id }) {
     return { success: false, error: 'Shift deletion failed: no shift returned', errorType: null, errorCode: null, shiftReturned: false }
   }
   return { success: true, data: { id: String(shift.id) }, shiftReturned: true }
+}
+
+/**
+ * Read the employee's shifts in a date range via GraphQL (#19). Read-only.
+ * For this API `employee(id)` takes an integer (`Int!`).
+ * @returns {Promise<{success: boolean, data?: object[], error?: string}>}
+ */
+async function readShifts({ employeeId, startOn, endOn }) {
+  const text = String(employeeId)
+  const numericId = Number(text)
+  if (!/^\d+$/.test(text) || !Number.isSafeInteger(numericId)) {
+    return { success: false, error: `Invalid employee identifier: ${employeeId}` }
+  }
+
+  const response = await fetch('https://api.factorialhr.com/graphql?ExtensionShifts', {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'X-Requested-With': 'XMLHttpRequest'
+    },
+    body: JSON.stringify({
+      operationName: 'ExtensionShifts',
+      variables: { employeeId: numericId, startOn, endOn },
+      query: `query ExtensionShifts($employeeId: Int!, $startOn: ISO8601Date!, $endOn: ISO8601Date!) {
+  attendance {
+    employee(id: $employeeId) {
+      attendanceShiftsConnection(startOn: $startOn, endOn: $endOn) {
+        nodes { id date clockIn clockOut __typename }
+        __typename
+      }
+      __typename
+    }
+    __typename
+  }
+}`
+    })
+  })
+
+  if (response.status === 401) return { success: false, error: 'Not authenticated' }
+  if (!response.ok) return { success: false, error: `HTTP ${response.status}: ${response.statusText}` }
+  const contentType = response.headers.get('Content-Type') || ''
+  if (!contentType.includes('application/json')) return { success: false, error: 'Unexpected response from Factorial' }
+
+  const result = await response.json()
+  if (Array.isArray(result?.errors) && result.errors.length > 0) {
+    return { success: false, error: result.errors[0].message || 'GraphQL error' }
+  }
+  const nodes = result?.data?.attendance?.employee?.attendanceShiftsConnection?.nodes
+  if (!Array.isArray(nodes)) return { success: false, error: 'No shifts in the response' }
+  return { success: true, data: nodes }
 }

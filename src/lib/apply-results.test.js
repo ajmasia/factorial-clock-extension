@@ -48,12 +48,12 @@ describe('summarizeDays', () => {
       { date: '2026-11-09', shifts: [created('1'), failed('overlap')] },
       { date: '2026-11-12', shifts: [created('2')] },
     ]
-    expect(summarizeDays(days)).toEqual({ created: 2, failed: 1, skipped: 0, total: 3 })
+    expect(summarizeDays(days)).toEqual({ created: 2, failed: 1, skipped: 0, excluded: 0, total: 3 })
   })
 
   it('does not count a skipped shift as failed', () => {
     const days = [{ date: '2026-11-09', shifts: [failed('overlaps with shift'), skipped()] }]
-    expect(summarizeDays(days)).toEqual({ created: 0, failed: 1, skipped: 1, total: 2 })
+    expect(summarizeDays(days)).toEqual({ created: 0, failed: 1, skipped: 1, excluded: 0, total: 2 })
   })
 })
 
@@ -88,5 +88,21 @@ describe('buildHistoryEntry', () => {
   it('keeps the fields the History page already shows', () => {
     const entry = buildHistoryEntry(scheduleData, [], now)
     expect(entry).toMatchObject({ weekStart: '2026-11-09', schedule: [], raw: [], totals: { formatted: '40h 0m' } })
+  })
+})
+
+describe('days excluded by the user (#19)', () => {
+  const scheduleData = { weekStart: '2026-11-09', schedule: [], raw: [], totals: { formatted: '32h 0m' } }
+  const now = new Date('2026-11-09T10:00:00Z')
+  const excluded = () => ({ clockIn: 'a', clockOut: 'b', id: null, status: SHIFT_STATUS.EXCLUDED, error: 'already in Factorial' })
+
+  it('counts excluded shifts apart and outside the total', () => {
+    const days = [{ date: '2026-11-09', shifts: [created('1')] }, { date: '2026-11-10', shifts: [excluded(), excluded()] }]
+    expect(summarizeDays(days)).toEqual({ created: 1, failed: 0, skipped: 0, excluded: 2, total: 1 })
+  })
+
+  it('keeps a week applied when every included day was created', () => {
+    const days = [{ date: '2026-11-09', shifts: [created('1')] }, { date: '2026-11-10', shifts: [excluded()] }]
+    expect(buildHistoryEntry(scheduleData, days, now).status).toBe(ENTRY_STATUS.APPLIED)
   })
 })
