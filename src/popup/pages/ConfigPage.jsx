@@ -1,16 +1,10 @@
 import { useState, useEffect } from 'react'
+import { DEFAULT_CONFIG, saveEmployeeId } from '../../lib/config-storage.js'
 
 function ConfigPage() {
-  const [config, setConfig] = useState({
-    weeklyHours: 40,
-    workDays: [1, 2, 3, 4, 5],
-    clockInRange: { start: '07:00', end: '07:30' },
-    lunchStartRange: { start: '14:00', end: '15:00' },
-    lunchDuration: { min: 45, max: 60 },
-    splitShiftDays: [1, 2, 3],
-    randomVariance: 5,
-    employeeId: 'auto',
-  })
+  const [config, setConfig] = useState(DEFAULT_CONFIG)
+  // True once the stored configuration has been read; auto-detection waits for it (#11)
+  const [loaded, setLoaded] = useState(false)
 
   const weekDays = [
     { id: 1, label: 'Mon' },
@@ -27,12 +21,12 @@ function ConfigPage() {
     loadConfig()
   }, [])
 
-  // Auto-fetch employee ID if not set
+  // Auto-fetch employee ID if the stored configuration has none
   useEffect(() => {
-    if (config.employeeId === 'auto' || config.employeeId === '') {
+    if (loaded && (config.employeeId === 'auto' || config.employeeId === '')) {
       autoFetchEmployeeId()
     }
-  }, [config.employeeId])
+  }, [loaded, config.employeeId])
 
   const autoFetchEmployeeId = async () => {
     try {
@@ -40,10 +34,10 @@ function ConfigPage() {
       const response = await chrome.runtime.sendMessage({ action: 'getEmployeeId' })
 
       if (response.success && response.data) {
-        console.log('[ConfigPage] Auto-fetched Employee ID:', response.data)
+        console.log('[ConfigPage] Auto-fetched Employee ID')
         setConfig(prev => ({ ...prev, employeeId: String(response.data) }))
-        // Save automatically
-        chrome.storage.sync.set({ config: { ...config, employeeId: String(response.data) } })
+        // Save only the Employee ID; the rest of the stored configuration is kept (#11)
+        await saveEmployeeId(response.data)
       }
     } catch (error) {
       console.log('[ConfigPage] Auto-fetch failed (will use manual entry):', error.message)
@@ -51,9 +45,15 @@ function ConfigPage() {
   }
 
   const loadConfig = async () => {
-    const result = await chrome.storage.sync.get(['config'])
-    if (result.config) {
-      setConfig(result.config)
+    try {
+      const result = await chrome.storage.sync.get(['config'])
+      if (result.config) {
+        setConfig(result.config)
+      }
+    } catch (error) {
+      console.error('[ConfigPage] Failed to load configuration:', error)
+    } finally {
+      setLoaded(true)
     }
   }
 

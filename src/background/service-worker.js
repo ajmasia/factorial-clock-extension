@@ -7,20 +7,9 @@ import {
 import { TIMING, STORAGE, ERROR_STRINGS, API } from '../lib/constants.js'
 import { formatDateTimeWithTimezone } from '../lib/time-utils.js'
 import { loadHistory, saveHistory } from '../lib/history-storage.js'
+import { DEFAULT_CONFIG } from '../lib/config-storage.js'
 
 console.log('Factorial Clock: Background service worker loaded')
-
-// Default configuration
-const DEFAULT_CONFIG = {
-  weeklyHours: 40,
-  workDays: [1, 2, 3, 4, 5], // Monday to Friday
-  clockInRange: { start: '07:00', end: '07:30' },
-  lunchStartRange: { start: '14:00', end: '15:00' },
-  lunchDuration: { min: 45, max: 60 },
-  splitShiftDays: [1, 2, 3], // Mon, Tue, Wed
-  randomVariance: 5,
-  employeeId: '', // Employee ID number (auto-detected from Factorial)
-}
 
 // Handle extension installation
 chrome.runtime.onInstalled.addListener((details) => {
@@ -272,7 +261,8 @@ async function handleApplySchedule(scheduleData) {
   try {
     // Get configuration
     const storage = await chrome.storage.sync.get(['config'])
-    let config = storage.config || DEFAULT_CONFIG
+    // Copy: config is modified below and must not alter the shared defaults
+    const config = { ...(storage.config || DEFAULT_CONFIG) }
 
     // Auto-fetch Employee ID if not configured
     let employeeId = config.employeeId
